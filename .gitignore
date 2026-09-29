@@ -1,0 +1,7 @@
+# Godot のキャッシュ
+.godot/
+
+# 書き出したビルド
+/build/
+*.exe
+*.pck

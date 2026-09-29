@@ -1,0 +1,33 @@
+; Engine configuration file.
+
+config_version=5
+
+[application]
+
+config/name="Tetris"
+run/main_scene="res://scenes/title.tscn"
+config/features=PackedStringArray("4.7")
+
+[autoload]
+
+InputSetup="*res://scripts/input_setup.gd"
+Loc="*res://scripts/locale.gd"
+App="*res://scripts/app.gd"
+Sfx="*res://scripts/audio/sfx.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=8
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.04, 0.04, 0.08, 1)
