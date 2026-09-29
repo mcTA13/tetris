@@ -26,6 +26,8 @@ const TSPIN_ATTACK := [0, 2, 4, 6]
 const MINI_ATTACK := [0, 0, 1]
 const COMBO_ATTACK := [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5]
 const PERFECT_CLEAR_ATTACK := 10
+const MAX_GARBAGE_PER_LOCK := 8     # 1回にせり上がる最大行数（残りは持ち越し）
+const GARBAGE_HOLE_CHANGE := 0.7    # 次の攻撃で穴の列が変わる確率
 
 # 設定（フレーム単位）
 var are_frames := 0
@@ -58,6 +60,11 @@ var _pending_rows: Array[int] = []
 var _buffered_rotation := 0
 var _buffered_hold := false
 
+# 対戦: 届いた攻撃の予告。[{"lines": int, "hole": int}, ...] 先に届いたものから順に
+var incoming: Array[Dictionary] = []
+var _garbage_rng := RandomNumberGenerator.new()
+var _last_hole := -1
+
 # 成績
 var level := 1
 var lines := 0
@@ -65,10 +72,15 @@ var score := 0
 var combo := -1
 var b2b := -1                   # 連続回数。-1 は未継続
 var pieces_placed := 0
+var lines_sent := 0
 
 
 func _init(seed_value: int = 0) -> void:
 	bag = Bag.new(seed_value)
+	if seed_value == 0:
+		_garbage_rng.randomize()
+	else:
+		_garbage_rng.seed = seed_value + 1
 
 
 func start() -> void:
@@ -96,6 +108,58 @@ func clear_progress() -> float:
 	if phase != Phase.CLEARING or line_clear_frames <= 0:
 		return 0.0
 	return 1.0 - float(_phase_timer) / line_clear_frames
+
+
+# ---------------- 対戦 ----------------
+
+## 相手からの攻撃を予告に積む。穴の列は攻撃ごとに決める
+func receive(lines_count: int) -> void:
+	if lines_count <= 0:
+		return
+	var hole := _last_hole
+	if hole < 0 or _garbage_rng.randf() < GARBAGE_HOLE_CHANGE:
+		hole = _garbage_rng.randi_range(0, Board.WIDTH - 1)
+		if hole == _last_hole:
+			hole = (hole + _garbage_rng.randi_range(1, Board.WIDTH - 1)) % Board.WIDTH
+	_last_hole = hole
+	incoming.append({"lines": lines_count, "hole": hole})
+	event.emit("garbage_incoming", {"total": incoming_total()})
+
+
+func incoming_total() -> int:
+	var total := 0
+	for g in incoming:
+		total += g.lines
+	return total
+
+
+## 自分の攻撃で予告を打ち消す。余った攻撃量を返す
+func _cancel_incoming(attack: int) -> int:
+	while attack > 0 and not incoming.is_empty():
+		var used := mini(attack, incoming[0].lines)
+		attack -= used
+		incoming[0].lines -= used
+		if incoming[0].lines == 0:
+			incoming.pop_front()
+	return attack
+
+
+## 予告を最大 MAX_GARBAGE_PER_LOCK 行せり上げる。あふれたら true
+func _raise_garbage() -> bool:
+	var budget := MAX_GARBAGE_PER_LOCK
+	var raised := 0
+	var overflow := false
+	while budget > 0 and not incoming.is_empty():
+		var n := mini(budget, incoming[0].lines)
+		overflow = board.add_garbage(n, incoming[0].hole) or overflow
+		budget -= n
+		raised += n
+		incoming[0].lines -= n
+		if incoming[0].lines == 0:
+			incoming.pop_front()
+	if raised > 0:
+		event.emit("garbage_rise", {"lines": raised, "total": incoming_total()})
+	return overflow
 
 
 ## 操作できない間（消去待ち・出現待ち）に押された回転・ホールドを覚えておく（IRS/IHS）
@@ -168,6 +232,21 @@ func hard_drop() -> void:
 	score += dist * HARD_DROP_POINTS
 	event.emit("hard_drop", {"distance": dist, "piece": piece, "rot": rot, "pos": pos})
 	_lock()
+
+
+## その場で一番下まで落とす（固定はしない）。ソフトドロップを最速にしたのと同じ。CPU が使う
+func sonic_drop() -> void:
+	if not can_control():
+		return
+	var dist := 0
+	while board.fits(piece, rot, pos + Vector2i(0, 1)):
+		pos.y += 1
+		dist += 1
+	if dist > 0:
+		_last_was_rotation = false
+		score += dist * SOFT_DROP_POINTS
+		_update_lowest()
+		event.emit("fall", {"soft": true})
 
 
 func ghost_y() -> int:
@@ -307,6 +386,17 @@ func _lock() -> void:
 
 	if lock_out and cleared == 0:
 		_game_over("lock_out")
+		return
+
+	if cleared > 0:
+		# 攻撃はまず予告を相殺し、余りを相手に送る
+		var attack: int = result.attack
+		var remaining := _cancel_incoming(attack)
+		if attack > 0:
+			lines_sent += remaining
+			event.emit("attack", {"lines": remaining, "cancelled": attack - remaining, "total": incoming_total()})
+	elif _raise_garbage():
+		_game_over("top_out")
 		return
 
 	if cleared > 0:

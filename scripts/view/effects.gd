@@ -120,11 +120,11 @@ func draw_particles(ci: CanvasItem, skin: UiSkin) -> void:
 		skin.draw_particle(ci, p.pos, p.size, p.color, p.rot, 1.0 - p.life / p.max_life)
 
 
-func draw_popups(ci: CanvasItem, skin: UiSkin, center: Vector2) -> void:
+func draw_popups(ci: CanvasItem, skin: UiSkin, center: Vector2, scale := 1.0) -> void:
 	if not _popups.is_empty():
-		skin.draw_popup(ci, center, _popups[0].lines, _popups[0].t, POPUP_DURATION)
+		skin.draw_popup(ci, center, _popups[0].lines, _popups[0].t, POPUP_DURATION, scale)
 
 
-func draw_flash(ci: CanvasItem, skin: UiSkin, size: Vector2) -> void:
+func draw_flash(ci: CanvasItem, skin: UiSkin, rect: Rect2) -> void:
 	if _flash > 0.0:
-		skin.draw_flash(ci, size, _flash)
+		skin.draw_flash(ci, rect, _flash)

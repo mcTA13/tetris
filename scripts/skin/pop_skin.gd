@@ -124,10 +124,10 @@ func draw_trail(ci: CanvasItem, rect: Rect2, color: Color, alpha: float) -> void
 		PackedColorArray([top, top, bottom, bottom]))
 
 
-func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duration: float) -> void:
+func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duration: float, size_scale := 1.0) -> void:
 	# 弾むように大きく出て、最後は上にふわっと消える
 	var appear := clampf(t / 0.28, 0.0, 1.0)
-	var scale := _back_out(appear)
+	var scale := _back_out(appear) * size_scale
 	var leave := clampf((t - (duration - 0.3)) / 0.3, 0.0, 1.0)
 	var alpha := 1.0 - leave
 	var rise := -30.0 * leave
@@ -137,7 +137,7 @@ func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duratio
 		var size := int((52 if li == lines.size() - 1 else 34) * scale)
 		if size <= 0:
 			continue
-		var wobble := sin(t * 10.0 + li) * 3.0 * (1.0 - appear * 0.7)
+		var wobble := sin(t * 10.0 + li) * 3.0 * (1.0 - appear * 0.7) * size_scale
 		var width := text_width(line, size, true)
 		var x := center.x - width / 2.0
 		for i in line.length():
@@ -148,7 +148,37 @@ func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duratio
 			ci.draw_string_outline(font_heavy, p, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 12, Color(NAVY, alpha))
 			ci.draw_string(font_heavy, p, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(color, alpha))
 			x += text_width(ch, size, true)
-		y += 60
+		y += 60 * size_scale
+
+
+func draw_flash(ci: CanvasItem, rect: Rect2, alpha: float) -> void:
+	# 盤面の角丸に合わせて光らせる
+	_box(Color(1, 1, 1, alpha), Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(ci.get_canvas_item(), rect)
+
+
+func draw_garbage_meter(ci: CanvasItem, rect: Rect2, lines: int, cell: float, time: float) -> void:
+	if lines <= 0:
+		return
+	# 量が増えるほど 黄→橙→赤 になり、多いと脈打つ
+	var color := Color("ffd83d") if lines < 4 else (Color("ff9f3d") if lines < 8 else Color("ff4f5e"))
+	var pulse := 0.0 if lines < 8 else 0.25 * (0.5 + 0.5 * sin(time * 14.0))
+	var h := minf(lines * cell, rect.size.y)
+	var r := Rect2(rect.position.x, rect.end.y - h, rect.size.x, h)
+	_box(color.lerp(Color.WHITE, pulse), NAVY, 2, 4, Color.TRANSPARENT).draw(ci.get_canvas_item(), r)
+	# 1行ごとの区切り
+	var y := r.end.y - cell
+	while y > r.position.y + 1:
+		ci.draw_line(Vector2(r.position.x + 2, y), Vector2(r.end.x - 2, y), Color(NAVY, 0.35), 1.0)
+		y -= cell
+
+
+func draw_attack_orb(ci: CanvasItem, pos: Vector2, lines: int, t: float) -> void:
+	# 虹色に光る玉と、ふちの紺
+	var r := 7.0 + lines * 2.5
+	var color: Color = RAINBOW[int(t * 20.0) % RAINBOW.size()]
+	ci.draw_circle(pos, r + 3.0, NAVY)
+	ci.draw_circle(pos, r, color)
+	ci.draw_circle(pos + Vector2(-r * 0.3, -r * 0.3), r * 0.3, Color(1, 1, 1, 0.8))
 
 
 func draw_counter(ci: CanvasItem, pos: Vector2, label: String, value: String, bounce: float) -> void:
@@ -244,6 +274,22 @@ func build_sounds() -> Dictionary:
 		"menu_back": Synth.mix([
 			[0.0, _click(4000, 0.3, 0.02, 160)],
 			[0.018, _click(2500, 0.18, 0.025, 140)]]),
+		# シュッ: 攻撃を送った
+		"attack": Synth.mix([
+			[0.0, Synth.tone(6000, 0.12, "noise", 0.12, 18)],
+			[0.0, _click(10000, 0.25, 0.012, 260)]]),
+		# ゴトッ: おじゃまがせり上がった
+		"garbage_rise": Synth.mix([
+			[0.0, _click(2000, 0.35, 0.03, 90)],
+			[0.0, Synth.tone(500, 0.04, "triangle", 0.2, 80)]]),
+		"win": Synth.mix([
+			[0.0, _pluck([72, 76, 79, 84], 0.08)],
+			[0.32, _chord([72, 76, 79, 84], 1.0)],
+			[0.32, _sparkle(12, 0.8)]]),
+		"lose": Synth.mix([
+			[0.0, Synth.tone(Synth.midi(72), 0.3, "triangle", 0.3, 6)],
+			[0.25, Synth.tone(Synth.midi(67), 0.3, "triangle", 0.3, 6)],
+			[0.5, Synth.tone(Synth.midi(64), 0.6, "triangle", 0.3, 5)]]),
 	}
 
 

@@ -24,6 +24,7 @@ var radius := 0
 var border := 2
 
 var _boxes := {}
+const MAX_CACHED_BOXES := 512
 
 
 func display_name() -> String:
@@ -128,17 +129,50 @@ func draw_trail(ci: CanvasItem, rect: Rect2, color: Color, alpha: float) -> void
 	ci.draw_rect(rect, Color(color, 0.35 * alpha))
 
 
-func draw_flash(ci: CanvasItem, size: Vector2, alpha: float) -> void:
-	ci.draw_rect(Rect2(Vector2(-50, -50), size + Vector2(100, 100)), Color(1, 1, 1, alpha))
+## 大技のときのフラッシュ。rect の範囲を光らせる
+func draw_flash(ci: CanvasItem, rect: Rect2, alpha: float) -> void:
+	ci.draw_rect(rect, Color(1, 1, 1, alpha))
 
 
-## 大きな文字（TETRIS など）。t: 経過秒、duration: 表示時間
-func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duration: float) -> void:
+## 大きな文字（TETRIS など）。t: 経過秒、duration: 表示時間、scale: 文字の大きさの倍率
+func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duration: float, scale := 1.0) -> void:
 	var alpha := clampf((duration - t) / 0.3, 0.0, 1.0)
-	var y := center.y - (lines.size() - 1) * 24.0
+	var y := center.y - (lines.size() - 1) * 24.0 * scale
 	for line in lines:
-		draw_text(ci, Vector2(center.x - 300, y), line, 40, Color(colors.highlight, alpha), HORIZONTAL_ALIGNMENT_CENTER, 600, true, 8)
-		y += 48
+		draw_text(ci, Vector2(center.x - 300, y), line, int(40 * scale), Color(colors.highlight, alpha), HORIZONTAL_ALIGNMENT_CENTER, 600, true, 8)
+		y += 48 * scale
+
+
+## おじゃまの予告ゲージ。rect は盤面の横の細長い枠（下が基準）
+func draw_garbage_meter(ci: CanvasItem, rect: Rect2, lines: int, cell: float, _time: float) -> void:
+	if lines <= 0:
+		return
+	var h := minf(lines * cell, rect.size.y)
+	ci.draw_rect(Rect2(rect.position.x, rect.end.y - h, rect.size.x, h), Color(1, 0.2, 0.2))
+
+
+## 攻撃が相手へ飛んでいく玉。t: 0（出発）→ 1（到着）
+func draw_attack_orb(ci: CanvasItem, pos: Vector2, lines: int, _t: float) -> void:
+	ci.draw_circle(pos, 6.0 + lines * 2.0, colors.highlight)
+
+
+## 上下で選ぶメニュー（ポーズなど）。labels は表示する文字、index は選択中
+func draw_menu_panel(ci: CanvasItem, center: Vector2, title: String, labels: Array, index: int, time: float) -> void:
+	var item := Vector2(260, 52)
+	var gap := item.y + 14
+	var w := 340.0
+	var h := 80 + labels.size() * gap + 10
+	var panel := Rect2(center.x - w / 2, center.y - h / 2, w, h)
+	draw_panel(ci, panel)
+	draw_text(ci, Vector2(panel.position.x, panel.position.y + 54), title, 40, "highlight", HORIZONTAL_ALIGNMENT_CENTER, w, true)
+	for i in labels.size():
+		var selected := i == index
+		var rect := Rect2(Vector2(center.x - item.x / 2, panel.position.y + 80 + i * gap), item)
+		if not selected:
+			draw_panel(ci, rect)
+		draw_item(ci, rect, selected, time)
+		draw_text(ci, Vector2(rect.position.x, rect.position.y + 36), labels[i], 26,
+			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
 
 
 ## REN / B2B などのカウンター。bounce: 増えた直後 1 → 0
@@ -172,6 +206,10 @@ func build_sounds() -> Dictionary:
 		"menu_move": Synth.tone(880, 0.04, "square", 0.1, 40),
 		"menu_select": Synth.arpeggio([79, 84], 0.05, 0.12, "square", 0.12),
 		"menu_back": Synth.arpeggio([84, 76], 0.05, 0.12, "square", 0.12),
+		"attack": Synth.tone(1200, 0.1, "square", 0.12, 20, 2400),
+		"garbage_rise": Synth.tone(220, 0.08, "square", 0.2, 30),
+		"win": Synth.arpeggio([72, 76, 79, 84], 0.08, 0.5, "square", 0.12),
+		"lose": Synth.arpeggio([72, 67, 64, 60], 0.15, 0.4, "square", 0.12, 5),
 	}
 
 
@@ -181,6 +219,9 @@ func _box(fill: Color, border_color: Color, border_width: int, corner: int, shad
 	var key := [fill, border_color, border_width, corner, shadow]
 	if _boxes.has(key):
 		return _boxes[key]
+	# 光りながら色が変わる描画もあるので、増えすぎたら作り直す
+	if _boxes.size() > MAX_CACHED_BOXES:
+		_boxes.clear()
 	var box := StyleBoxFlat.new()
 	box.bg_color = fill
 	box.border_color = border_color

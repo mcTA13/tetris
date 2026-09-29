@@ -49,12 +49,17 @@ func _ready() -> void:
 		for _t in 25:
 			g.tick()
 	g.hold()
-	scene._message = "B2B x1
+	scene._field._message = "B2B x1
 T-SPIN DOUBLE
 REN 2"
-	scene._message_timer = 1.5
+	scene._field._message_timer = 1.5
 	await _frames(5)
 	_save(out_dir + "/shot_game.png")
+	scene.paused = true
+	scene._pause_index = 1
+	await _frames(3)
+	_save(out_dir + "/shot_pause.png")
+	scene.paused = false
 	scene.queue_free()
 
 	App.mode = App.Mode.SPRINT_40L

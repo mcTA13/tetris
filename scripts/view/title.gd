@@ -2,10 +2,11 @@ extends Node2D
 ## タイトル・モード選択
 
 const SETTINGS := -1
-const ITEMS := [App.Mode.SPRINT_40L, App.Mode.MARATHON, SETTINGS]
-const ITEM_SIZE := Vector2(380, 64)
-const ITEM_TOP := 300
-const ITEM_GAP := 80
+const VERSUS := -2
+const ITEMS := [App.Mode.SPRINT_40L, App.Mode.MARATHON, VERSUS, SETTINGS]
+const ITEM_SIZE := Vector2(380, 60)
+const ITEM_TOP := 262
+const ITEM_GAP := 72
 
 var _index := 0
 var _time := 0.0
@@ -30,6 +31,9 @@ func _process(delta: float) -> void:
 		if ITEMS[_index] == SETTINGS:
 			get_tree().change_scene_to_file("res://scenes/settings.tscn")
 			return
+		if ITEMS[_index] == VERSUS:
+			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
+			return
 		App.mode = ITEMS[_index]
 		get_tree().change_scene_to_file("res://scenes/game.tscn")
 
@@ -46,8 +50,8 @@ func _draw() -> void:
 		if not selected:
 			skin.draw_panel(self, rect)
 		skin.draw_item(self, rect, selected, _time)
-		var key: String = "menu_settings" if ITEMS[i] == SETTINGS else App.MODE_KEYS[ITEMS[i]]
-		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 44), Loc.t(key), 32,
+		var key: String = {SETTINGS: "menu_settings", VERSUS: "mode_versus"}.get(ITEMS[i], App.MODE_KEYS.get(ITEMS[i], ""))
+		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 42), Loc.t(key), 30,
 			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
 
 	var record := ""
@@ -56,9 +60,12 @@ func _draw() -> void:
 		record = "%s  %s" % [Loc.t("best"), best]
 	elif ITEMS[_index] == App.Mode.MARATHON:
 		record = "%s  %d" % [Loc.t("high_score"), App.marathon_best_score]
+	elif ITEMS[_index] == VERSUS:
+		var r: Array = App.versus_record(App.versus_level)
+		record = "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [r[0], r[1]]]
 	if record != "":
 		var rw: float = skin.text_width(record, 24, true) + 60
-		var rect := Rect2(640 - rw / 2, 548, rw, 48)
+		var rect := Rect2(640 - rw / 2, 566, rw, 48)
 		skin.draw_panel(self, rect)
 		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 34), record, 24, "highlight", HORIZONTAL_ALIGNMENT_CENTER, rw, true)
 

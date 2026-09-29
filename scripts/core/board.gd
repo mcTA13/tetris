@@ -48,6 +48,21 @@ func remove_rows(rows: Array[int]) -> void:
 		grid.insert(0, _empty_row())
 
 
+## 下からおじゃまを count 行差し込む（穴は hole_x）。上にあふれたブロックがあれば true
+func add_garbage(count: int, hole_x: int) -> bool:
+	var overflow := false
+	for _i in count:
+		if grid[0].count(PieceData.NONE) != WIDTH:
+			overflow = true
+		grid.remove_at(0)
+		var row := PackedByteArray()
+		row.resize(WIDTH)
+		row.fill(PieceData.GARBAGE)
+		row[hole_x] = PieceData.NONE
+		grid.append(row)
+	return overflow
+
+
 func is_empty() -> bool:
 	for row in grid:
 		for v in row:

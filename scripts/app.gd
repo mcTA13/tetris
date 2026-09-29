@@ -27,6 +27,10 @@ const DEFAULT_SETTINGS := {
 var mode := Mode.SPRINT_40L
 var best_40l_ticks := 0         # 0 は記録なし
 var marathon_best_score := 0
+# CPU 対戦
+var versus_level := 3           # 1〜5、6 は隠しの TAS
+var versus_first_to := 2
+var versus_records := {}        # 強さ → [勝ち, 負け]
 var settings := DEFAULT_SETTINGS.duplicate()
 var bindings := {}              # {"pad": {action: [button]}, "key": {action: [keycode]}}。空なら既定
 var skin: UiSkin
@@ -58,6 +62,18 @@ func submit_40l(ticks: int) -> bool:
 	return true
 
 
+func submit_versus(level: int, won: bool) -> void:
+	var record: Array = versus_record(level)
+	record[0 if won else 1] += 1
+	versus_records[level] = record
+	save()
+
+
+## [勝ち, 負け]
+func versus_record(level: int) -> Array:
+	return versus_records.get(level, [0, 0]).duplicate()
+
+
 func submit_marathon(score: int) -> bool:
 	if score <= marathon_best_score:
 		return false
@@ -81,6 +97,9 @@ func save() -> void:
 	f.store_string(JSON.stringify({
 		"best_40l_ticks": best_40l_ticks,
 		"marathon_best_score": marathon_best_score,
+		"versus_level": versus_level,
+		"versus_first_to": versus_first_to,
+		"versus_records": versus_records,
 		"settings": settings,
 		"bindings": bindings,
 	}, "\t"))
@@ -94,6 +113,12 @@ func _load() -> void:
 		return
 	best_40l_ticks = int(data.get("best_40l_ticks", 0))
 	marathon_best_score = int(data.get("marathon_best_score", 0))
+	versus_level = clampi(int(data.get("versus_level", 3)), 1, 5)  # 隠しの TAS は毎回コマンドで出す
+	versus_first_to = clampi(int(data.get("versus_first_to", 2)), 1, 3)
+	var records = data.get("versus_records", {})
+	if records is Dictionary:
+		for k in records:
+			versus_records[int(k)] = [int(records[k][0]), int(records[k][1])]
 	var saved: Dictionary = data.get("settings", {})
 	for k in DEFAULT_SETTINGS:
 		if saved.has(k):
