@@ -58,9 +58,12 @@ Lv.4・Lv.5・TAS は [Cold Clear 2](https://github.com/MinusKelvin/cold-clear-2
 ```
 git clone https://github.com/MinusKelvin/cold-clear-2.git
 cd cold-clear-2
+set RUSTFLAGS=-C target-feature=+crt-static
 cargo build --release
 copy target\release\cold-clear-2.exe <このプロジェクト>\lib\
 ```
+
+`crt-static` を付けるのは、配布先に Visual C++ 再頒布可能パッケージが無くても動くようにするため。
 
 使っているコミットは `lib/COLD-CLEAR-2-VERSION.txt`。ゲームを書き出したときは、exe の隣の `lib/` に `cold-clear-2.exe` を置く（`tools/export.ps1` が自動で置く）。
 
