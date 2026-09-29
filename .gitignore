@@ -3,6 +3,7 @@
 
 # 書き出したビルド
 /build/
+/dist/
 *.exe
 *.pck
 

@@ -22,6 +22,17 @@ godot --path .
 godot --headless --path . -s tests/run_tests.gd
 ```
 
+## 書き出し（Windows）
+
+Godot 4.7.2 の export templates を入れてから:
+
+```
+powershell -ExecutionPolicy Bypass -File tools/export.ps1
+```
+
+`build/` に `Tetris.exe`（データ埋め込み）と `cold-clear-2.exe`、ライセンスが並び、
+配布用に `dist/Tetris-windows-x86_64.zip` ができる。
+
 ## 構成
 
 | 場所 | 内容 |
