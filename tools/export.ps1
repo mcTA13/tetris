@@ -14,10 +14,10 @@ New-Item -ItemType Directory -Force $build, $dist | Out-Null
 & $godot --headless --path $root --export-release "Windows Desktop" (Join-Path $build "Tetris.exe")
 if (-not (Test-Path (Join-Path $build "Tetris.exe"))) { throw "export failed" }
 
-# CPU 対戦の思考エンジンと、同梱物のライセンスは exe と同じフォルダに置く
-Copy-Item (Join-Path $root "bin\cold-clear-2.exe") $build
-New-Item -ItemType Directory -Force (Join-Path $build "licenses") | Out-Null
-Copy-Item (Join-Path $root "bin\COLD-CLEAR-2-LICENSE-*") (Join-Path $build "licenses")
+# CPU 対戦の思考エンジンは lib/ に、同梱物のライセンスは licenses/ に置く。
+New-Item -ItemType Directory -Force (Join-Path $build "lib"), (Join-Path $build "licenses") | Out-Null
+Copy-Item (Join-Path $root "lib\cold-clear-2.exe") (Join-Path $build "lib")
+Copy-Item (Join-Path $root "lib\COLD-CLEAR-2-LICENSE-*") (Join-Path $build "licenses")
 Copy-Item (Join-Path $root "assets\fonts\OFL.txt") (Join-Path $build "licenses\M-PLUS-ROUNDED-1C-OFL.txt")
 
 $zip = Join-Path $dist "Tetris-windows-x86_64.zip"

@@ -30,8 +30,10 @@ Godot 4.7.2 の export templates を入れてから:
 powershell -ExecutionPolicy Bypass -File tools/export.ps1
 ```
 
-`build/` に `Tetris.exe`（データ埋め込み）と `cold-clear-2.exe`、ライセンスが並び、
+`build/` に `Tetris.exe`（データ埋め込み）、`lib/cold-clear-2.exe`、`licenses/` が並び、
 配布用に `dist/Tetris-windows-x86_64.zip` ができる。
+
+アイコン（`assets/icon/`）を作り直すときは `godot --path . tools/make_icon.tscn` のあと `python tools/pack_ico.py`。
 
 ## 構成
 
@@ -42,14 +44,14 @@ powershell -ExecutionPolicy Bypass -File tools/export.ps1
 | `scripts/skin/` | 見た目・演出の描き方・効果音。新しいテイストはここに追加して `App.SKINS` に登録 |
 | `scripts/audio/` | 効果音の合成と再生 |
 | `scripts/ai/` | CPU。Lv.1〜3 は自前の思考（`cpu_brain.gd`）、Lv.4 以上は Cold Clear 2 |
-| `bin/` | Cold Clear 2 の実行ファイルとライセンス |
+| `lib/` | Cold Clear 2 の実行ファイルとライセンス |
 | `tests/` | ロジックのテストと、画面確認用のスクリーンショット |
 
 ## CPU（Cold Clear 2）
 
 Lv.4・Lv.5・TAS は [Cold Clear 2](https://github.com/MinusKelvin/cold-clear-2)（MinusKelvin 作、MIT / Apache-2.0）を
 外部プロセスとして起動し、Tetris Bot Protocol（標準入出力の JSON）で置き場所を聞いている。
-`bin/cold-clear-2.exe` が見つからないときは自前の思考で代わりに戦う。
+`lib/cold-clear-2.exe` が見つからないときは自前の思考で代わりに戦う。
 
 作り直すとき（Rust が必要）:
 
@@ -57,12 +59,12 @@ Lv.4・Lv.5・TAS は [Cold Clear 2](https://github.com/MinusKelvin/cold-clear-2
 git clone https://github.com/MinusKelvin/cold-clear-2.git
 cd cold-clear-2
 cargo build --release
-copy target\release\cold-clear-2.exe <このプロジェクト>\bin\
+copy target\release\cold-clear-2.exe <このプロジェクト>\lib\
 ```
 
-使っているコミットは `bin/COLD-CLEAR-2-VERSION.txt`。ゲームを書き出したときは、exe と同じフォルダに `cold-clear-2.exe` を置く。
+使っているコミットは `lib/COLD-CLEAR-2-VERSION.txt`。ゲームを書き出したときは、exe の隣の `lib/` に `cold-clear-2.exe` を置く（`tools/export.ps1` が自動で置く）。
 
 ## ライセンス
 
 - 同梱フォント M PLUS Rounded 1c は SIL Open Font License 1.1（`assets/fonts/OFL.txt`）
-- 同梱の Cold Clear 2 は MIT / Apache-2.0（`bin/COLD-CLEAR-2-LICENSE-*`）
+- 同梱の Cold Clear 2 は MIT / Apache-2.0（`lib/COLD-CLEAR-2-LICENSE-*`）

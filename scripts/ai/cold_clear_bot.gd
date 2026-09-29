@@ -22,11 +22,11 @@ var _lines: Array[String] = []
 var _running := false           # start を送って計算中
 
 
-## 実行ファイルの場所（エディタではプロジェクトの bin/、書き出し後はゲームの exe と同じフォルダ）
+## 実行ファイルの場所（書き出し後はゲームの exe の隣の lib/、エディタではプロジェクトの lib/）
 static func exe_path() -> String:
 	var candidates := [
-		OS.get_executable_path().get_base_dir().path_join(EXE_NAME),
-		ProjectSettings.globalize_path("res://bin/" + EXE_NAME),
+		OS.get_executable_path().get_base_dir().path_join("lib").path_join(EXE_NAME),
+		ProjectSettings.globalize_path("res://lib/" + EXE_NAME),
 	]
 	for p in candidates:
 		if FileAccess.file_exists(p):
