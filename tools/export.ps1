@@ -22,5 +22,8 @@ Copy-Item (Join-Path $root "assets\fonts\OFL.txt") (Join-Path $build "licenses\M
 
 $zip = Join-Path $dist "Tetris-windows-x86_64.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
-Compress-Archive -Path (Join-Path $build "*") -DestinationPath $zip
+# Compress-Archive（PowerShell 5.1）は区切りが \ になり、展開ツールによってはフォルダにならないので tar で作る
+Push-Location $build
+tar -a -c -f $zip *
+Pop-Location
 Write-Output "done: $zip"
