@@ -3,7 +3,7 @@ extends RefCounted
 ## 画面演出の状態（粒・大きな文字・残像・揺れ・フラッシュ・カウンターの跳ね）。
 ## 動きの計算だけを持ち、描き方はスキンに任せる。
 
-const POPUP_DURATION := 1.4
+const POPUP_DURATION := 0.7
 const TRAIL_DURATION := 0.2
 const FLASH_DURATION := 0.25
 const BOUNCE_DURATION := 0.25

@@ -26,6 +26,7 @@ var message_rect := Rect2()     # 直前の消し方の表示（中央揃え）�
 var show_meter := false
 
 var fx := Effects.new()
+var _guide := {}                # アシストのおすすめ {"type", "pos", "rot", "hold"}
 var _base_position := Vector2.ZERO
 var _lock_flash := {}
 var _hard_dropped := false
@@ -42,6 +43,15 @@ func setup(new_game: GameState, player: bool) -> void:
 	_lock_flash.clear()
 	_message_timer = 0.0
 	_hard_dropped = false
+
+
+## アシストのおすすめの置き場所を出す。hold なら先にホールドをすすめる
+func set_guide(type: int, pos: Vector2i, rot: int, hold: bool) -> void:
+	_guide = {"type": type, "pos": pos, "rot": rot, "hold": hold}
+
+
+func clear_guide() -> void:
+	_guide = {}
 
 
 func set_base_position(p: Vector2) -> void:
@@ -134,7 +144,7 @@ func _on_clear(data: Dictionary) -> void:
 		_sound("perfect")
 		fx.shake(skin_fx.shake_perfect)
 		big = true
-	elif data.spin != GameState.Spin.NONE:
+	elif data.spin != GameState.Spin.NONE and data.piece == PieceData.T:
 		_sound("spin")
 		if data.lines > 0:
 			fx.shake(skin_fx.shake_spin)
@@ -197,11 +207,13 @@ static func clear_name(data: Dictionary) -> String:
 	if data.b2b > 0:
 		parts.append("B2B x%d" % data.b2b)
 	var title := ""
-	if data.spin != GameState.Spin.NONE:
+	# スピンの演出は T だけ（ほかのミノのスピンは普通の消去と同じ見せ方）
+	if data.spin != GameState.Spin.NONE and data.piece == PieceData.T:
 		title = "%s-SPIN %s" % [PieceData.NAMES[data.piece], SPIN_NAMES[data.spin]]
 	if data.lines > 0:
 		title += LINE_NAMES[data.lines]
-	parts.append(title.strip_edges())
+	if title.strip_edges() != "":
+		parts.append(title.strip_edges())
 	if data.combo > 0:
 		parts.append("REN %d" % data.combo)
 	if data.perfect:
@@ -239,6 +251,10 @@ func _draw() -> void:
 		var ghost := Vector2i(game.pos.x, game.ghost_y())
 		for c in PieceData.cells(game.piece, game.rot):
 			_draw_board_cell(ghost + c, game.piece, UiSkin.CellStyle.GHOST)
+		if not _guide.is_empty():
+			var pulse := 0.5 + 0.5 * sin(_time * 8.0)
+			for c in PieceData.cells(_guide.type, _guide.rot):
+				_draw_board_cell(_guide.pos + c, _guide.type, UiSkin.CellStyle.GUIDE, pulse)
 		for c in PieceData.cells(game.piece, game.rot):
 			_draw_board_cell(game.pos + c, game.piece)
 
@@ -248,6 +264,8 @@ func _draw() -> void:
 	# ホールド
 	var preview := cell * 0.8
 	_draw_box_header(hold_rect, Loc.t("hold"))
+	if not _guide.is_empty() and _guide.hold:
+		skin.draw_guide_box(self, hold_rect, 0.5 + 0.5 * sin(_time * 8.0))
 	if game.hold_piece != PieceData.NONE:
 		var style := UiSkin.CellStyle.DIM if game.hold_used else UiSkin.CellStyle.PREVIEW
 		_draw_preview(game.hold_piece, Rect2(hold_rect.position + Vector2(0, preview * 1.5), Vector2(hold_rect.size.x, hold_rect.size.y - preview * 1.5)), preview, style)

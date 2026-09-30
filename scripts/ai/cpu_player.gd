@@ -10,17 +10,18 @@ const TAS_LEVEL := 6
 ##  pps: 1秒に置く数の上限 / interval: 操作 1 回の間隔（tick、0 は 1 tick にまとめて）
 ##  depth: 何手先まで読むか / beam: 読むときに残す候補の数
 ##  spins: 回転やソフトドロップで入れる場所も探すか（Tスピン） / use_hold: ホールドを使うか
-##  mistake: 最善でない手を選ぶ確率
+##  mistake: 最善でない手を選ぶ確率 / mistake_margin: そのとき選んでよい、1番よい手との点数差
+##  clean: きれいに積む評価（El-Tetris 型）を使う。浅い読みでも穴を作りにくい
 ##  cold_clear: Cold Clear 2 に考えさせる / think_ticks: そのとき考えさせる時間（tick）
 const CONFIG := {
-	1: {"pps": 0.7, "interval": 6, "depth": 1, "beam": 1, "spins": false, "use_hold": false, "mistake": 0.3},
-	2: {"pps": 1.2, "interval": 5, "depth": 1, "beam": 1, "spins": false, "use_hold": true, "mistake": 0.12},
-	3: {"pps": 1.8, "interval": 4, "depth": 1, "beam": 1, "spins": true, "use_hold": true, "mistake": 0.04},
-	4: {"pps": 2.5, "interval": 3, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0,
+	1: {"pps": 0.7, "interval": 6, "depth": 1, "beam": 1, "spins": false, "use_hold": false, "mistake": 0.3, "mistake_margin": 40.0, "clean": true},
+	2: {"pps": 1.2, "interval": 5, "depth": 1, "beam": 1, "spins": false, "use_hold": true, "mistake": 0.12, "mistake_margin": 20.0, "clean": true},
+	3: {"pps": 1.8, "interval": 4, "depth": 2, "beam": 3, "spins": true, "use_hold": true, "mistake": 0.04, "mistake_margin": 5.0, "clean": true, "attack_weight": 8.0},
+	4: {"pps": 2.5, "interval": 3, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
 		"cold_clear": true, "think_ticks": 6},
-	5: {"pps": 3.5, "interval": 2, "depth": 2, "beam": 6, "spins": true, "use_hold": true, "mistake": 0.0,
+	5: {"pps": 3.5, "interval": 2, "depth": 2, "beam": 6, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
 		"cold_clear": true, "think_ticks": 15},
-	TAS_LEVEL: {"pps": 10.0, "interval": 0, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0,
+	TAS_LEVEL: {"pps": 10.0, "interval": 0, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
 		"cold_clear": true, "think_ticks": 4},
 }
 const TAS_STEPS_PER_TICK := 12
@@ -28,6 +29,7 @@ const TAS_STEPS_PER_TICK := 12
 var game: GameState
 var level := 3
 var use_thread := true          # シミュレーションでは false にして同じ結果を得る
+var misplaced := 0              # 狙った場所と違うところに置いた回数（調整用）
 
 var _config: Dictionary
 var _rng := RandomNumberGenerator.new()
@@ -163,7 +165,11 @@ func _take_result() -> bool:
 	_target = r
 	var candidates: Array = r.get("candidates", [])
 	if candidates.size() > 1 and _rng.randf() < _config.mistake:
-		_target = candidates[_rng.randi_range(1, mini(candidates.size() - 1, 4))]
+		# ミスは「少し損な手」だけ。1番よい手と点数が離れすぎた手（穴を作る手など）は選ばない
+		var best_score: float = candidates[0].score
+		var close := candidates.slice(1, 5).filter(func(c): return c.score >= best_score - _config.mistake_margin)
+		if not close.is_empty():
+			_target = close[_rng.randi_range(0, close.size() - 1)]
 	return true
 
 
@@ -229,5 +235,7 @@ func _fallback_target() -> Dictionary:
 func _drop() -> bool:
 	if _piece_ticks < 60.0 / _config.pps:
 		return false
+	if _target.has("x") and (game.pos.x != _target.x or game.rot != _target.rot or game.ghost_y() != _target.y):
+		misplaced += 1
 	game.hard_drop()
 	return false

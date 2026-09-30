@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS := {
 	"label_style": "auto",      # auto / xbox / ps
 	"language": "",             # 空なら OS の言語に合わせる
 	"skin": "pop",
+	"assist": false,            # 40ラインで Cold Clear 2 のおすすめを出す
 }
 
 var mode := Mode.SPRINT_40L

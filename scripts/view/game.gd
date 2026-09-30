@@ -1,6 +1,7 @@
 extends Node2D
 ## 1人用のゲーム画面（40ライン / マラソン）。盤面の描画と演出は FieldView、
 ## ここでは入力・進行・情報パネル・バナー・ポーズを受け持つ。
+## 40ラインでアシストがオンなら、Cold Clear 2 のおすすめの置き場所をガイドとして出す。
 
 const CELL := 30.0
 const BOARD_POS := Vector2(490, 70)
@@ -11,7 +12,7 @@ const STAT_H := 62
 const COUNTER_POS := Vector2(814, 548)
 const READY_TICKS := 45
 const GO_TICKS := 30
-const MARATHON_GOAL := 150
+const ASSIST_THINK_TICKS := 9   # アシスト: おすすめを聞くまで Cold Clear 2 に考えさせる時間
 const PAUSE_ITEMS := ["resume", "retry", "to_title"]  # Loc のキー
 
 var game: GameState
@@ -25,6 +26,10 @@ var _last_level := 1
 var _time := 0.0
 var _field := FieldView.new()
 var _overlay := Node2D.new()    # 盤面より手前に描くもの（バナー・ポーズ）
+var _assist: ColdClearBot       # 40ラインのアシスト（使わないときは null）
+var _assist_wait := -1          # おすすめを聞くまでの残り tick
+var _assist_asked := false
+var _assist_pending := false    # Cold Clear 2 の準備ができたら聞く
 
 
 func _ready() -> void:
@@ -36,7 +41,16 @@ func _ready() -> void:
 	add_child(_field)
 	add_child(_overlay)
 	_overlay.draw.connect(_draw_overlay)
+	if App.mode == App.Mode.SPRINT_40L and App.settings.assist and ColdClearBot.available():
+		_assist = ColdClearBot.new()
+		if not _assist.launch():
+			_assist = null
 	_new_game()
+
+
+func _exit_tree() -> void:
+	if _assist != null:
+		_assist.quit()
 
 
 func _new_game() -> void:
@@ -44,8 +58,7 @@ func _new_game() -> void:
 	if App.mode == App.Mode.SPRINT_40L:
 		game.fixed_level = 1
 		game.line_goal = 40
-	else:
-		game.line_goal = MARATHON_GOAL
+	# マラソンは終わりなし（ゲームオーバーまで）
 	game.event.connect(_on_game_event)
 	_field.setup(game, true)
 	var stats_h := _stats().size() * STAT_H + 16
@@ -59,6 +72,10 @@ func _new_game() -> void:
 	_countdown = READY_TICKS
 	_go_timer = 0
 	_last_level = game.level
+	_assist_wait = -1
+	_assist_asked = false
+	_assist_pending = false
+	_field.clear_guide()
 	Sfx.play("ready")
 
 
@@ -85,6 +102,7 @@ func _physics_process(delta: float) -> void:
 		Sfx.play("menu_select")
 		return
 
+	_update_assist()
 	# READY 中も DAS を溜めたり、回転・ホールドを先行入力できる
 	input.update(held, pressed)
 	if _countdown > 0:
@@ -125,6 +143,35 @@ func _update_pause_menu(delta: float, pressed: Dictionary) -> void:
 				_to_title()
 
 
+## アシスト: ミノが出たら（ホールドを含む）盤面を送り、少し考えさせてからおすすめを聞く
+func _request_assist() -> void:
+	_field.clear_guide()
+	_assist_asked = false
+	if not _assist.is_ready:
+		_assist_pending = true
+		return
+	_assist_pending = false
+	_assist.start(game)
+	_assist_wait = ASSIST_THINK_TICKS
+
+
+func _update_assist() -> void:
+	if _assist == null:
+		return
+	var r := _assist.poll()
+	if _assist_pending and _assist.is_ready and game.can_control():
+		_request_assist()
+	if _assist_wait > 0:
+		_assist_wait -= 1
+		if _assist_wait == 0:
+			_assist.suggest()
+			_assist_asked = true
+	if not r.is_empty() and _assist_asked:
+		_assist_asked = false
+		if not r.has("none") and game.can_control():
+			_field.set_guide(r.type, Vector2i(r.x, r.y), r.rot, r.type != game.piece)
+
+
 func _to_title() -> void:
 	get_tree().change_scene_to_file("res://scenes/title.tscn")
 
@@ -137,10 +184,18 @@ func _process(delta: float) -> void:
 
 func _on_game_event(kind: String, _data: Dictionary) -> void:
 	match kind:
+		"spawn":
+			if _assist != null:
+				_request_assist()
+		"lock":
+			_field.clear_guide()
+			_assist_wait = -1
+			_assist_asked = false
 		"finished":
 			Sfx.play("finish")
 			if App.mode == App.Mode.SPRINT_40L:
-				_new_record = App.submit_40l(game.ticks)
+				# アシストを使ったタイムは自己ベストにしない
+				_new_record = false if _assist != null else App.submit_40l(game.ticks)
 			else:
 				_new_record = App.submit_marathon(game.score)
 		"game_over":
@@ -178,9 +233,12 @@ func _stats() -> Array:
 	var seconds := game.ticks / 60.0
 	var pps := game.pieces_placed / seconds if seconds > 0 else 0.0
 	if App.mode == App.Mode.SPRINT_40L:
-		return [[Loc.t("time"), App.format_time(game.ticks)], [Loc.t("lines"), "%d / 40" % mini(game.lines, 40)], [Loc.t("pps"), "%.2f" % pps]]
+		var s := [[Loc.t("time"), App.format_time(game.ticks)], [Loc.t("lines"), "%d / 40" % mini(game.lines, 40)], [Loc.t("pps"), "%.2f" % pps]]
+		if _assist != null:
+			s.append([Loc.t("assist"), Loc.t("on")])
+		return s
 	return [[Loc.t("score"), str(game.score)], [Loc.t("level"), str(game.level)],
-		[Loc.t("lines"), "%d / %d" % [game.lines, MARATHON_GOAL]], [Loc.t("time"), App.format_time(game.ticks)]]
+		[Loc.t("lines"), str(game.lines)], [Loc.t("time"), App.format_time(game.ticks)]]
 
 
 func _draw_stats() -> void:
@@ -201,11 +259,14 @@ func _draw_result(center: Vector2) -> void:
 	if App.mode == App.Mode.SPRINT_40L:
 		if game.phase == GameState.Phase.CLEARED:
 			lines = [Loc.t("finish"), App.format_time(game.ticks), "PPS %.2f" % (game.pieces_placed / maxf(seconds, 1.0 / 60.0))]
-			lines.append(Loc.t("new_record") if _new_record else "%s %s" % [Loc.t("best"), App.format_time(App.best_40l_ticks)])
+			if _assist != null:
+				lines.append(Loc.t("assist_no_record"))
+			else:
+				lines.append(Loc.t("new_record") if _new_record else "%s %s" % [Loc.t("best"), App.format_time(App.best_40l_ticks)])
 		else:
 			lines = [Loc.t("game_over"), "%s %d / 40" % [Loc.t("lines"), game.lines]]
 	else:
-		lines = [Loc.t("complete") if game.phase == GameState.Phase.CLEARED else Loc.t("game_over"),
+		lines = [Loc.t("game_over"),
 			"%s %d" % [Loc.t("score"), game.score],
 			"%s %d  %s %d" % [Loc.t("level"), game.level, Loc.t("lines"), game.lines]]
 		lines.append(Loc.t("new_record") if _new_record else "%s %d" % [Loc.t("high_score"), App.marathon_best_score])

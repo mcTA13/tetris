@@ -67,6 +67,10 @@ func draw_cell(ci: CanvasItem, rect: Rect2, type: int, style := CellStyle.NORMAL
 		CellStyle.GHOST:
 			_box(Color(color, 0.18), Color(color, 0.85), 2, corner, Color.TRANSPARENT).draw(ci.get_canvas_item(), r)
 			return
+		CellStyle.GUIDE:
+			# アシストのおすすめ: 白く点滅する太い枠（ゴーストと見分けやすく）
+			_box(Color(1, 1, 1, 0.22 + 0.2 * flash), Color(1, 1, 1, 0.7 + 0.3 * flash), 3, 4, Color.TRANSPARENT).draw(ci.get_canvas_item(), r.grow(-1))
+			return
 		CellStyle.DIM:
 			color = Color("c9c4dc")
 	color = color.lerp(Color.WHITE, flash)
@@ -126,9 +130,10 @@ func draw_trail(ci: CanvasItem, rect: Rect2, color: Color, alpha: float) -> void
 
 func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duration: float, size_scale := 1.0) -> void:
 	# 弾むように大きく出て、最後は上にふわっと消える
-	var appear := clampf(t / 0.28, 0.0, 1.0)
+	# 出てくる・消えていく時間は表示時間に合わせる
+	var appear := clampf(t / (duration * 0.2), 0.0, 1.0)
 	var scale := _back_out(appear) * size_scale
-	var leave := clampf((t - (duration - 0.3)) / 0.3, 0.0, 1.0)
+	var leave := clampf((t - duration * 0.75) / (duration * 0.25), 0.0, 1.0)
 	var alpha := 1.0 - leave
 	var rise := -30.0 * leave
 	var y := center.y - (lines.size() - 1) * 30.0 + rise
@@ -154,6 +159,12 @@ func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duratio
 func draw_flash(ci: CanvasItem, rect: Rect2, alpha: float) -> void:
 	# 盤面の角丸に合わせて光らせる
 	_box(Color(1, 1, 1, alpha), Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(ci.get_canvas_item(), rect)
+
+
+func draw_guide_box(ci: CanvasItem, rect: Rect2, pulse: float) -> void:
+	# ホールドの枠をピンクに光らせる
+	var box := _box(Color.TRANSPARENT, Color(colors.accent, 0.5 + 0.5 * pulse), 5, radius + 4, Color.TRANSPARENT)
+	box.draw(ci.get_canvas_item(), rect.grow(5))
 
 
 func draw_garbage_meter(ci: CanvasItem, rect: Rect2, lines: int, cell: float, time: float) -> void:

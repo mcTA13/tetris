@@ -23,8 +23,6 @@ const V_BUMPINESS_SQ := -7.0
 const V_ROW_TRANSITIONS := -5.0
 const V_CAVITY := -173.0
 const V_CAVITY_SQ := -3.0
-const V_OVERHANG := -34.0
-const V_OVERHANG_SQ := -1.0
 const V_COVERED := -17.0
 const V_COVERED_SQ := -1.0
 const V_TSLOT := [8.0, 148.0, 192.0, 407.0]    # Tスピンの穴（消せるライン数ごと）
@@ -206,8 +204,23 @@ static func _path(parent: Dictionary, key: int) -> Array:
 
 # ================= 評価 =================
 
-## 置いたときのご褒美と、置いた後の状態。戻り値 {"reward", "attack", "b2b", "combo", "rows", "cleared"}
+## 置いたときのご褒美と、置いた後の状態。
+## 戻り値 {"reward", "attack", "b2b", "combo", "rows", "cleared", "landing", "eroded"}
 static func apply_move(rows: PackedInt32Array, type: int, p: Dictionary, b2b: int, combo: int) -> Dictionary:
+	# El-Tetris 型の評価で使う「着地の高さ」と「消えた行のうち今のミノのブロック数」
+	var with_piece := rows.duplicate()
+	var top := H
+	var bottom := 0
+	for c in PieceData.cells(type, p.rot):
+		with_piece[p.y + c.y] |= 1 << (p.x + c.x)
+		top = mini(top, p.y + c.y)
+		bottom = maxi(bottom, p.y + c.y)
+	var eroded := 0
+	for c in PieceData.cells(type, p.rot):
+		if with_piece[p.y + c.y] == FULL:
+			eroded += 1
+	var landing := H - (top + bottom) / 2.0
+
 	var placed := place(rows, type, p.rot, p.x, p.y)
 	var new_rows: PackedInt32Array = placed[0]
 	var cleared: int = placed[1]
@@ -247,7 +260,83 @@ static func apply_move(rows: PackedInt32Array, type: int, p: Dictionary, b2b: in
 	if type == PieceData.T and not (is_tspin and cleared > 0):
 		reward += R_WASTED_T
 	reward += R_ATTACK * attack
-	return {"reward": reward, "attack": attack, "b2b": b2b, "combo": combo, "rows": new_rows, "cleared": cleared}
+	return {"reward": reward, "attack": attack, "b2b": b2b, "combo": combo, "rows": new_rows, "cleared": cleared,
+		"landing": landing, "eroded": eroded}
+
+
+# ---- きれいに積む評価（El-Tetris の重み）。Lv.1〜3 で使う ----
+# Cold Clear 型は深く読む前提で TETRIS 用の井戸を守りすぎ、浅い読みだと井戸の横に穴を作ってしまうため
+const C_LANDING := -4.5
+const C_ERODED := 3.418
+const C_ROW_TRANSITIONS := -3.2178
+const C_COL_TRANSITIONS := -9.3487
+const C_HOLES := -7.8993
+const C_WELLS := -3.3855
+# 少しは攻めるための追加（井戸の列は溝の減点から外し、TETRIS の準備に加点する）
+const C_CLEAR := [0.0, -6.0, -3.0, 2.0, 25.0]
+const C_WELL_ROW := 6.0        # 井戸の列以外が埋まった行 1 段ごと（4 段まで）
+
+
+## 置いた手全体の良さ（大きいほどよい）。m は apply_move の戻り値、attack_weight は送るライン 1 本の価値
+static func evaluate_clean(m: Dictionary, attack_weight: float) -> float:
+	var rows: PackedInt32Array = m.rows
+	var v: float = C_LANDING * m.landing + C_ERODED * m.cleared * m.eroded + attack_weight * m.attack + C_CLEAR[m.cleared]
+	# 井戸 = 一番低い列（well_top はその列で一番上にあるブロックの行。空なら H）
+	var well := 0
+	var well_top := -1
+	for x in W:
+		var top := H
+		for y in H:
+			if rows[y] & (1 << x):
+				top = y
+				break
+		if top > well_top:
+			well_top = top
+			well = x
+	var well_rows := 0
+	var well_mask := FULL & ~(1 << well)
+	for y in range(well_top - 1, -1, -1):
+		if rows[y] == well_mask:
+			well_rows += 1
+		else:
+			break
+	v += C_WELL_ROW * mini(well_rows, 4)
+	# 行の切り替わり（左右の壁は埋まり扱い）
+	var row_trans := 0
+	for y in H:
+		var r: int = rows[y] | (1 << W)
+		row_trans += _popcount((r ^ ((r << 1) | 1)) & ((1 << (W + 1)) - 1))
+	# 列の切り替わり（床は埋まり扱い）・穴・井戸
+	var col_trans := 0
+	var holes := 0
+	var wells := 0
+	for x in W:
+		var bit := 1 << x
+		var prev := false
+		var covered := false
+		var depth := 0
+		for y in H:
+			var filled := (rows[y] & bit) != 0
+			if filled != prev:
+				col_trans += 1
+			prev = filled
+			if filled:
+				covered = true
+				depth = 0
+			else:
+				if covered:
+					holes += 1
+				var left := x == 0 or (rows[y] & (bit >> 1)) != 0
+				var right := x == W - 1 or (rows[y] & (bit << 1)) != 0
+				if left and right and x != well:
+					depth += 1
+					wells += depth
+				else:
+					depth = 0
+		if not prev:
+			col_trans += 1
+	v += C_ROW_TRANSITIONS * row_trans + C_COL_TRANSITIONS * col_trans + C_HOLES * holes + C_WELLS * wells
+	return v
 
 
 ## 盤面の良さ（大きいほどよい）。incoming は予告のライン数
@@ -297,9 +386,8 @@ static func evaluate(rows: PackedInt32Array, incoming := 0, b2b := -1) -> float:
 		transitions += _popcount((r ^ shifted) & ((1 << (W + 1)) - 1))
 	v += V_ROW_TRANSITIONS * transitions
 
-	# 穴: 横から入れるものは「張り出し」、入れないものは「空洞」
+	# 穴（ふさがった空き）と、その上に乗っているブロックの数
 	var cavities := 0
-	var overhangs := 0
 	var covered := 0
 	var covered_sq := 0
 	for x in W:
@@ -309,19 +397,12 @@ static func evaluate(rows: PackedInt32Array, incoming := 0, b2b := -1) -> float:
 			if rows[y] & (1 << x):
 				above += 1
 				continue
-			# 横が空いていて、上に乗っているのが浅ければ、すべり込ませて埋められる張り出し。
-			# 井戸は TETRIS 用に空けておく列なので、そこからは埋められない扱い
-			var side_open := (x > 0 and x - 1 != well and heights[x - 1] < H - y) \
-				or (x < W - 1 and x + 1 != well and heights[x + 1] < H - y)
-			if side_open and above <= 2:
-				overhangs += 1
-			else:
-				cavities += 1
+			# ふさがった空きはすべて穴として数える（「後で埋められる」と見込むと、1マスの穴を気軽に作ってしまう）
+			cavities += 1
 			var c := mini(above, 6)
 			covered += c
 			covered_sq += c * c
 	v += V_CAVITY * cavities + V_CAVITY_SQ * cavities * cavities
-	v += V_OVERHANG * overhangs + V_OVERHANG_SQ * overhangs * overhangs
 	v += V_COVERED * covered + V_COVERED_SQ * covered_sq
 
 	# 井戸: 一番低い列の上で、ほかが全部埋まっている行の数（TETRIS の準備）
@@ -413,7 +494,10 @@ static func think(state: Dictionary, config: Dictionary) -> Dictionary:
 						"can_hold": config.use_hold, "start": spawn,
 						"first": node.first if node.first != null else {"hold": option.hold, "x": p.x, "y": p.y, "rot": p.rot, "spin": p.spin},
 					}
-					child["score"] = child.reward + evaluate(m.rows, state.incoming if depth == 0 else 0, m.b2b)
+					if config.get("clean", false):
+						child["score"] = evaluate_clean(m, config.get("attack_weight", 3.0))
+					else:
+						child["score"] = child.reward + evaluate(m.rows, state.incoming if depth == 0 else 0, m.b2b)
 					children.append(child)
 		if children.is_empty():
 			break
@@ -430,7 +514,9 @@ static func think(state: Dictionary, config: Dictionary) -> Dictionary:
 	# 1手目の候補（ミスの演出に使う）
 	var candidates := []
 	for c in first_moves.slice(0, 6):
-		candidates.append(c.first)
+		var candidate: Dictionary = c.first.duplicate()
+		candidate["score"] = c.score
+		candidates.append(candidate)
 	best["candidates"] = candidates
 	return best
 

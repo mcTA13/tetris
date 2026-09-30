@@ -4,10 +4,10 @@ extends Node2D
 const SOFT_DROP_OPTIONS := [5, 10, 20, 40, App.SOFT_DROP_INSTANT]
 const LABEL_STYLES := ["auto", "xbox", "ps"]
 const ADJUSTABLE := ["language", "skin", "se_volume", "das", "arr", "soft_drop", "line_clear_delay", "are",
-	"das_cut", "vibration", "confirm_b", "label_style"]
+	"das_cut", "vibration", "confirm_b", "label_style", "assist"]
 const WAIT_SECONDS := 5.0
 const PANEL := Rect2(220, 100, 840, 580)
-const ROW_H := 34
+const ROW_H := 33
 
 var _page := "main"
 var _index := 0
@@ -98,7 +98,7 @@ func _change(key: String, step: int) -> void:
 			s.line_clear_delay = clampi(s.line_clear_delay + step, 0, 40)
 		"are":
 			s.are = clampi(s.are + step, 0, 20)
-		"das_cut", "vibration":
+		"das_cut", "vibration", "assist":
 			s[key] = not s[key]
 		"confirm_b":
 			s.confirm_b = not s.confirm_b
@@ -124,7 +124,7 @@ func _select(key: String) -> void:
 			App.save()
 		"back":
 			_leave_page()
-		"language", "skin", "das_cut", "vibration", "confirm_b", "label_style":
+		"language", "skin", "das_cut", "vibration", "confirm_b", "label_style", "assist":
 			_change(key, 1)
 		_:
 			if _page != "main":
@@ -173,7 +173,7 @@ func _value(key: String) -> String:
 			return Loc.t("instant") if s.soft_drop == App.SOFT_DROP_INSTANT else "x%d" % s.soft_drop
 		"line_clear_delay", "are":
 			return "%d F" % s[key]
-		"das_cut", "vibration":
+		"das_cut", "vibration", "assist":
 			return Loc.t("on") if s[key] else Loc.t("off")
 		"confirm_b":
 			return InputSetup.button_label(JOY_BUTTON_B if s.confirm_b else JOY_BUTTON_A)

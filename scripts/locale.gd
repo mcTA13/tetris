@@ -34,6 +34,8 @@ const STRINGS := {
 	"complete": ["COMPLETE!", "COMPLETE!"],
 	"game_over": ["GAME OVER", "GAME OVER"],
 	"new_record": ["新記録！", "NEW RECORD!"],
+	"assist": ["アシスト", "ASSIST"],
+	"assist_no_record": ["アシスト中は記録なし", "No record with assist"],
 	"hint_game": ["リトライ: %s　ポーズ: %s", "Retry: %s    Pause: %s"],
 	# CPU 対戦
 	"versus_setup": ["CPU対戦", "VS CPU"],
@@ -68,6 +70,7 @@ const STRINGS := {
 	"set_das_cut": ["左右切り替えでDASをリセット", "RESET DAS ON SWITCH"],
 	"set_vibration": ["振動", "VIBRATION"],
 	"set_se_volume": ["効果音の音量", "SOUND VOLUME"],
+	"set_assist": ["40ラインのアシスト", "40 LINES ASSIST"],
 	"set_confirm_b": ["決定ボタン", "CONFIRM BUTTON"],
 	"set_label_style": ["ボタン表記", "BUTTON LABELS"],
 	"set_pad": ["コントローラー設定", "CONTROLLER CONFIG"],

@@ -33,8 +33,8 @@ func _play(level_a: int, level_b: int, seed_value: int) -> Dictionary:
 	var a := GameState.new(seed_value)
 	var b := GameState.new(seed_value + (0 if level_b > 0 else 777))
 	var stats := [{}, {}]
-	a.event.connect(func(kind, data): _on_event(kind, data, b, stats[0]))
-	b.event.connect(func(kind, data): _on_event(kind, data, a, stats[1]))
+	a.event.connect(func(kind, data): _on_event(kind, data, b, stats[0], a))
+	b.event.connect(func(kind, data): _on_event(kind, data, a, stats[1], b))
 	var solo := level_b == 0
 	var pa := CpuPlayer.new(a, level_a)
 	var pb := CpuPlayer.new(b, maxi(level_b, 1))
@@ -59,7 +59,7 @@ func _play(level_a: int, level_b: int, seed_value: int) -> Dictionary:
 				think_total += ms
 				think_max = maxf(think_max, ms)
 				thinks += 1
-		if show_board and a.pieces_placed % 60 == 0 and a.pieces_placed > 0 and a.phase == GameState.Phase.PLAYING and a.pieces_placed != _last_shown:
+		if show_board and a.pieces_placed % 10 == 0 and a.pieces_placed > 0 and a.pieces_placed <= 120 and a.phase == GameState.Phase.PLAYING and a.pieces_placed != _last_shown:
 			_last_shown = a.pieces_placed
 			_print_board(a)
 		# Cold Clear 2 は実時間で考えるので、使うときは実際の速さで進める
@@ -74,17 +74,35 @@ func _play(level_a: int, level_b: int, seed_value: int) -> Dictionary:
 			var winner := 2 if a_out and b_out else (1 if a_out else 0)
 			pa.shutdown()
 			pb.shutdown()
+			stats[0]["misplaced"] = pa.misplaced
+			stats[1]["misplaced"] = pb.misplaced
 			return {"winner": winner, "ticks": ticks, "a": a, "b": b, "think_avg": think_total / maxi(thinks, 1), "think_max": think_max, "stats": stats}
 	pa.shutdown()
 	pb.shutdown()
+	stats[0]["misplaced"] = pa.misplaced
+	stats[1]["misplaced"] = pb.misplaced
 	return {"winner": 2, "ticks": ticks, "a": a, "b": b, "think_avg": think_total / maxi(thinks, 1), "think_max": think_max, "stats": stats}
 
 
 ## 攻撃を相手に届け、消し方を数える
-func _on_event(kind: String, data: Dictionary, target: GameState, st: Dictionary) -> void:
+func _on_event(kind: String, data: Dictionary, target: GameState, st: Dictionary, own: GameState) -> void:
 	if kind == "attack":
 		if target.phase != GameState.Phase.ARE or target.pieces_placed > 0:
 			target.receive(data.lines)
+	elif kind == "lock":
+		# 置くたびに盤面の穴（上がふさがった空き）を数える
+		var holes := 0
+		for x in Board.WIDTH:
+			var covered := false
+			for y in Board.HEIGHT:
+				var filled: bool = own.board.grid[y][x] != PieceData.NONE
+				if filled:
+					covered = true
+				elif covered:
+					holes += 1
+		st["holes_sum"] = st.get("holes_sum", 0) + holes
+		st["holes_max"] = maxi(st.get("holes_max", 0), holes)
+		st["locks"] = st.get("locks", 0) + 1
 	elif kind == "clear":
 		var key := "clear%d" % data.lines
 		if data.spin == GameState.Spin.FULL and data.piece == PieceData.T:
