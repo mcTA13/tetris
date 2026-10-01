@@ -91,10 +91,7 @@ static func detect_spin(rows: PackedInt32Array, type: int, rot: int, x: int, y: 
 		if (filled[rot] and filled[(rot + 1) % 4]) or kick_index == 4:
 			return GameState.Spin.FULL
 		return GameState.Spin.MINI
-	for d in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-		if fits(rows, type, rot, x + d.x, y + d.y):
-			return GameState.Spin.NONE
-	return GameState.Spin.MINI
+	return GameState.Spin.NONE  # T 以外はスピン扱いしない
 
 
 ## 置いて、揃った行を消す。戻り値 [新しい行, 消えた行数]
@@ -234,7 +231,7 @@ static func apply_move(rows: PackedInt32Array, type: int, p: Dictionary, b2b: in
 			reward += R_TSPIN[cleared]
 			attack = GameState.TSPIN_ATTACK[cleared]
 		elif spin == GameState.Spin.MINI:
-			reward += R_MINI[mini(cleared, 2)] if type == PieceData.T else R_CLEAR[cleared]
+			reward += R_MINI[mini(cleared, 2)]
 			attack = maxi(GameState.MINI_ATTACK[mini(cleared, 2)], GameState.LINE_ATTACK[cleared])
 		else:
 			reward += R_CLEAR[cleared]

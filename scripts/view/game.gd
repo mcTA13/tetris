@@ -13,6 +13,8 @@ const COUNTER_POS := Vector2(814, 548)
 const READY_TICKS := 45
 const GO_TICKS := 30
 const ASSIST_THINK_TICKS := 9   # アシスト: おすすめを聞くまで Cold Clear 2 に考えさせる時間
+# 6-3 積み（左 6 列・右 3 列、左から 7 列目を井戸）用の Cold Clear 2 の設定
+const SIX_THREE_CONFIG := "cold-clear-2-six-three.json"
 const PAUSE_ITEMS := ["resume", "retry", "to_title"]  # Loc のキー
 
 var game: GameState
@@ -41,9 +43,9 @@ func _ready() -> void:
 	add_child(_field)
 	add_child(_overlay)
 	_overlay.draw.connect(_draw_overlay)
-	if App.mode == App.Mode.SPRINT_40L and App.settings.assist and ColdClearBot.available():
+	if App.mode == App.Mode.SPRINT_40L and App.settings.assist != "off" and ColdClearBot.available():
 		_assist = ColdClearBot.new()
-		if not _assist.launch():
+		if not _assist.launch(SIX_THREE_CONFIG if App.settings.assist == "six_three" else ""):
 			_assist = null
 	_new_game()
 
@@ -235,7 +237,7 @@ func _stats() -> Array:
 	if App.mode == App.Mode.SPRINT_40L:
 		var s := [[Loc.t("time"), App.format_time(game.ticks)], [Loc.t("lines"), "%d / 40" % mini(game.lines, 40)], [Loc.t("pps"), "%.2f" % pps]]
 		if _assist != null:
-			s.append([Loc.t("assist"), Loc.t("on")])
+			s.append([Loc.t("assist"), Loc.t("assist_" + App.settings.assist)])
 		return s
 	return [[Loc.t("score"), str(game.score)], [Loc.t("level"), str(game.level)],
 		[Loc.t("lines"), str(game.lines)], [Loc.t("time"), App.format_time(game.ticks)]]

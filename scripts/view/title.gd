@@ -3,10 +3,11 @@ extends Node2D
 
 const SETTINGS := -1
 const VERSUS := -2
-const ITEMS := [App.Mode.SPRINT_40L, App.Mode.MARATHON, VERSUS, SETTINGS]
-const ITEM_SIZE := Vector2(380, 60)
-const ITEM_TOP := 262
-const ITEM_GAP := 72
+const DEMO := -3
+const ITEMS := [App.Mode.SPRINT_40L, App.Mode.MARATHON, VERSUS, DEMO, SETTINGS]
+const ITEM_SIZE := Vector2(380, 54)
+const ITEM_TOP := 240
+const ITEM_GAP := 64
 
 var _index := 0
 var _time := 0.0
@@ -34,6 +35,10 @@ func _process(delta: float) -> void:
 		if ITEMS[_index] == VERSUS:
 			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
 			return
+		if ITEMS[_index] == DEMO:
+			App.demo = true
+			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
+			return
 		App.mode = ITEMS[_index]
 		get_tree().change_scene_to_file("res://scenes/game.tscn")
 
@@ -50,8 +55,8 @@ func _draw() -> void:
 		if not selected:
 			skin.draw_panel(self, rect)
 		skin.draw_item(self, rect, selected, _time)
-		var key: String = {SETTINGS: "menu_settings", VERSUS: "mode_versus"}.get(ITEMS[i], App.MODE_KEYS.get(ITEMS[i], ""))
-		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 42), Loc.t(key), 30,
+		var key: String = {SETTINGS: "menu_settings", VERSUS: "mode_versus", DEMO: "mode_demo"}.get(ITEMS[i], App.MODE_KEYS.get(ITEMS[i], ""))
+		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 39), Loc.t(key), 28,
 			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
 
 	var record := ""
@@ -63,6 +68,8 @@ func _draw() -> void:
 	elif ITEMS[_index] == VERSUS:
 		var r: Array = App.versus_record(App.versus_level)
 		record = "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [r[0], r[1]]]
+	elif ITEMS[_index] == DEMO:
+		record = Loc.t("demo_desc") % [App.demo_levels[0], App.demo_levels[1]]
 	if record != "":
 		var rw: float = skin.text_width(record, 24, true) + 60
 		var rect := Rect2(640 - rw / 2, 566, rw, 48)

@@ -1,0 +1,47 @@
+diff --git a/src/bot/freestyle.rs b/src/bot/freestyle.rs
+index 0a50093..88f4609 100644
+--- a/src/bot/freestyle.rs
++++ b/src/bot/freestyle.rs
+@@ -119,6 +119,13 @@ pub struct Weights {
+     pub combo_attack: f32,
+     pub perfect_clear: f32,
+     pub perfect_clear_override: bool,
++
++    /// Fixed tetris well column (e.g. 6 for 6-3 stacking). None = lowest column.
++    #[serde(default)]
++    pub well_column: Option<usize>,
++    /// Weight per filled cell left in the fixed well column.
++    #[serde(default)]
++    pub well_column_cells: f32,
+ }
+ 
+ fn evaluate(
+@@ -206,14 +213,20 @@ fn evaluate(
+     eval += weights.cell_coveredness * coveredness as f32;
+ 
+     // tetris well depth
+-    let (tetris_well_column, tetris_well_height) = state
+-        .board
+-        .cols
+-        .iter()
+-        .enumerate()
+-        .map(|(i, &c)| (i, 64 - c.leading_zeros()))
+-        .min_by_key(|&(_, h)| h)
+-        .unwrap();
++    let (tetris_well_column, tetris_well_height) = match weights.well_column {
++        Some(col) => (col, 64 - state.board.cols[col].leading_zeros()),
++        None => state
++            .board
++            .cols
++            .iter()
++            .enumerate()
++            .map(|(i, &c)| (i, 64 - c.leading_zeros()))
++            .min_by_key(|&(_, h)| h)
++            .unwrap(),
++    };
++    if let Some(col) = weights.well_column {
++        eval += weights.well_column_cells * state.board.cols[col].count_ones() as f32;
++    }
+     let full_lines_except_well = state
+         .board
+         .cols

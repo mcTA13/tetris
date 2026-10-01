@@ -98,8 +98,11 @@ func _change(key: String, step: int) -> void:
 			s.line_clear_delay = clampi(s.line_clear_delay + step, 0, 40)
 		"are":
 			s.are = clampi(s.are + step, 0, 20)
-		"das_cut", "vibration", "assist":
+		"das_cut", "vibration":
 			s[key] = not s[key]
+		"assist":
+			var modes := App.ASSIST_MODES
+			s.assist = modes[(modes.find(s.assist) + step + modes.size()) % modes.size()]
 		"confirm_b":
 			s.confirm_b = not s.confirm_b
 			InputSetup.apply(App.bindings, s.confirm_b)
@@ -173,8 +176,10 @@ func _value(key: String) -> String:
 			return Loc.t("instant") if s.soft_drop == App.SOFT_DROP_INSTANT else "x%d" % s.soft_drop
 		"line_clear_delay", "are":
 			return "%d F" % s[key]
-		"das_cut", "vibration", "assist":
+		"das_cut", "vibration":
 			return Loc.t("on") if s[key] else Loc.t("off")
+		"assist":
+			return Loc.t("assist_" + s.assist)
 		"confirm_b":
 			return InputSetup.button_label(JOY_BUTTON_B if s.confirm_b else JOY_BUTTON_A)
 		"label_style":

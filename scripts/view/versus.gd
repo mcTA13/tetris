@@ -1,5 +1,6 @@
 extends Node2D
 ## CPU 対戦画面。左が自分、右が CPU。App.versus_level / App.versus_first_to で設定する。
+## App.demo が true ならデモ: 左右とも CPU（強さは App.demo_levels）で、ラウンドを終わりなく繰り返す（ボタンでタイトルへ）。
 
 const CELL := 24.0
 const PLAYER_POS := Vector2(88, 150)
@@ -12,6 +13,7 @@ const MAX_LEVEL := 15
 const ORB_TIME := 0.45
 const PAUSE_ITEMS := ["resume", "retry", "to_title"]
 const END_ITEMS := ["retry", "to_title"]
+const DEMO_NEXT_TICKS := 150    # デモ: ラウンド決着から次のラウンドまで
 
 enum State { READY, PLAYING, ROUND_END, MATCH_END }
 
@@ -37,9 +39,12 @@ var _cpu_view := FieldView.new()
 var _overlay := Node2D.new()
 var _record_saved := false
 var _totals := [[0, 0, 0], [0, 0, 0]]  # 試合全体の [置いた数, 送ったライン, tick]（自分, CPU）
+var demo := false
+var _left_cpu: CpuPlayer        # デモで左側を操作する CPU
 
 
 func _ready() -> void:
+	demo = App.demo
 	for v in [_player_view, _cpu_view]:
 		v.cell = CELL
 		v.hold_rect = Rect2(0, 0, 100, 92)
@@ -73,14 +78,20 @@ func _new_round() -> void:
 		g.fixed_level = 1
 	player.event.connect(_on_event.bind(0))
 	cpu.event.connect(_on_event.bind(1))
-	_player_view.setup(player, true)
+	_player_view.setup(player, not demo)
 	_cpu_view.setup(cpu, false)
 	input = InputHandler.new(player)
 	App.configure(player, input)
 	cpu.line_clear_frames = player.line_clear_frames
 	if cpu_player != null:
 		cpu_player.shutdown()
-	cpu_player = CpuPlayer.new(cpu, App.versus_level)
+	cpu_player = CpuPlayer.new(cpu, App.demo_levels[1] if demo else App.versus_level)
+	if _left_cpu != null:
+		_left_cpu.shutdown()
+		_left_cpu = null
+	if demo:
+		player.line_clear_frames = cpu.line_clear_frames
+		_left_cpu = CpuPlayer.new(player, App.demo_levels[0])
 	input.prime(InputSetup.poll()[0])
 	InputSetup.clear_pressed()
 	_orbs.clear()
@@ -91,7 +102,7 @@ func _new_round() -> void:
 	_go_timer = 0
 	_round_ticks = 0
 	_round_winner = -1
-	Sfx.play("ready")
+	Sfx.play("ready", 1.0, 0.5 if demo else 1.0)
 
 
 func _physics_process(delta: float) -> void:
@@ -99,6 +110,9 @@ func _physics_process(delta: float) -> void:
 	var held: Dictionary = polled[0]
 	var pressed: Dictionary = polled[1]
 
+	if demo:
+		_demo_process(pressed)
+		return
 	if state == State.MATCH_END:
 		_update_menu(delta, pressed, END_ITEMS)
 		return
@@ -147,9 +161,45 @@ func _physics_process(delta: float) -> void:
 				_next_round()
 
 
+## デモ: 左右とも CPU。ラウンドを終わりなく繰り返し、どれかのボタンでタイトルへ
+func _demo_process(pressed: Dictionary) -> void:
+	for k in pressed:
+		if pressed[k]:
+			App.demo = false
+			get_tree().change_scene_to_file("res://scenes/title.tscn")
+			return
+	match state:
+		State.READY:
+			_timer -= 1
+			if _timer <= 0:
+				player.start()
+				cpu.start()
+				state = State.PLAYING
+				_go_timer = GO_TICKS
+				Sfx.play("go", 1.0, 0.5)
+		State.PLAYING:
+			_left_cpu.tick()
+			cpu_player.tick()
+			player.tick()
+			cpu.tick()
+			_go_timer = maxi(_go_timer - 1, 0)
+			_round_ticks += 1
+			var lv := mini(1 + _round_ticks / MARGIN_TICKS, MAX_LEVEL)
+			player.fixed_level = lv
+			cpu.fixed_level = lv
+			_check_round_end()
+		State.ROUND_END:
+			_timer -= 1
+			if _timer <= ROUND_END_TICKS - DEMO_NEXT_TICKS:
+				round_no += 1
+				_new_round()
+
+
 func _exit_tree() -> void:
 	if cpu_player != null:
 		cpu_player.shutdown()
+	if _left_cpu != null:
+		_left_cpu.shutdown()
 
 
 func _check_round_end() -> void:
@@ -169,7 +219,10 @@ func _check_round_end() -> void:
 	else:
 		_round_winner = 1 if p_out else 0
 		wins[_round_winner] += 1
-	Sfx.play("win" if _round_winner == 0 else "lose")
+	if demo:
+		Sfx.play("win", 1.0, 0.5)
+	else:
+		Sfx.play("win" if _round_winner == 0 else "lose")
 
 
 func _next_round() -> void:
@@ -217,7 +270,7 @@ func _on_event(kind: String, data: Dictionary, side: int) -> void:
 	if data.lines > 0:
 		target.receive(data.lines)
 		_orbs.append({"from": from_view.board_global_center(), "to": to_view.meter_global_point(), "t": 0.0, "lines": data.lines})
-		Sfx.play("attack", 1.0, 1.0 if side == 0 else 0.5)
+		Sfx.play("attack", 1.0, 1.0 if side == 0 and not demo else 0.5)
 
 
 func _process(delta: float) -> void:
@@ -238,26 +291,31 @@ func _draw() -> void:
 	var skin: UiSkin = App.skin
 	skin.draw_background(self, Vector2(1280, 720), _time)
 	# 名前と勝ち数
-	_draw_name(PLAYER_POS, Loc.t("you"), wins[0])
-	_draw_name(CPU_POS, _cpu_name(), wins[1])
+	_draw_name(PLAYER_POS, _cpu_name(0) if demo else Loc.t("you"), wins[0])
+	_draw_name(CPU_POS, _cpu_name(1), wins[1])
 	skin.draw_text(self, Vector2(0, 90), "VS", 44, "title", HORIZONTAL_ALIGNMENT_CENTER, 1280, true, 12)
-	skin.draw_text(self, Vector2(0, 124), Loc.t("first_to_value") % App.versus_first_to, 16, "text", HORIZONTAL_ALIGNMENT_CENTER, 1280, true)
+	var sub := "DEMO" if demo else Loc.t("first_to_value") % App.versus_first_to
+	skin.draw_text(self, Vector2(0, 124), sub, 16, "text", HORIZONTAL_ALIGNMENT_CENTER, 1280, true)
 	# 攻撃の状況
 	_draw_stats(PLAYER_POS, player)
 	_draw_stats(CPU_POS, cpu)
-	var hint := Loc.t("hint_game") % [InputSetup.action_hint("retry"), InputSetup.action_hint("pause")]
+	var hint := Loc.t("hint_demo") if demo else Loc.t("hint_game") % [InputSetup.action_hint("retry"), InputSetup.action_hint("pause")]
 	skin.draw_text(self, Vector2(24, 704), hint, 15, "text")
 
 
-func _cpu_name() -> String:
-	if App.versus_level == CpuPlayer.TAS_LEVEL:
-		return "CPU  TAS"
-	return "CPU  Lv.%d" % App.versus_level
+## side: 0 が左、1 が右（デモ以外では右の CPU だけ）
+func _cpu_name(side := 1) -> String:
+	var level: int = App.demo_levels[side] if demo else App.versus_level
+	return "CPU  TAS" if level == CpuPlayer.TAS_LEVEL else "CPU  Lv.%d" % level
 
 
 func _draw_name(pos: Vector2, label: String, win_count: int) -> void:
 	var skin: UiSkin = App.skin
 	skin.draw_text(self, pos + Vector2(126, -48), label, 26, "title", HORIZONTAL_ALIGNMENT_LEFT, -1, true, 8)
+	if demo:
+		# デモは終わりがないので、通算の勝ち数を数字で出す
+		skin.draw_text(self, pos + Vector2(126, -48), "%d WIN" % win_count, 26, "title", HORIZONTAL_ALIGNMENT_RIGHT, 240, true, 8)
+		return
 	# 勝ち数の丸
 	for i in App.versus_first_to:
 		var c := pos + Vector2(126 + 240 - 14 - i * 30, -56)

@@ -453,11 +453,8 @@ func _detect_spin() -> Dictionary:
 			return {"spin": Spin.FULL, "piece": piece}
 		return {"spin": Spin.MINI, "piece": piece}
 
-	# 全ミノスピン：上下左右どこにも動けなければスピン（Mini 扱い）
-	for d in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-		if board.fits(piece, rot, pos + d):
-			return none
-	return {"spin": Spin.MINI, "piece": piece}
+	# T 以外のミノはスピン扱いしない（ガイドライン準拠。得点・攻撃・B2B も普通の消去と同じ）
+	return none
 
 
 func _score_clear(cleared: int, spin_info: Dictionary) -> Dictionary:

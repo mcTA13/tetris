@@ -6,7 +6,7 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var out_dir: String = args[0] if args.size() > 0 else "user://"
 	App.mode = App.Mode.SPRINT_40L
-	App.settings.assist = true  # 保存はしない
+	App.settings.assist = "six_three"  # 保存はしない
 	var scene: Node = load("res://scenes/game.tscn").instantiate()
 	add_child(scene)
 	await get_tree().create_timer(3.0).timeout

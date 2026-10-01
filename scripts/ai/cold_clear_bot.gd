@@ -38,12 +38,18 @@ static func available() -> bool:
 	return exe_path() != ""
 
 
-## 起動して rules を送る。失敗したら false
-func launch() -> bool:
+## 起動して rules を送る。失敗したら false。
+## config_name を渡すと、exe と同じフォルダのその設定ファイル（評価の重み）で起動する
+func launch(config_name := "") -> bool:
 	var path := exe_path()
 	if path == "":
 		return false
-	var info := OS.execute_with_pipe(path, [])
+	var args := []
+	if config_name != "":
+		var config := path.get_base_dir().path_join(config_name)
+		if FileAccess.file_exists(config):
+			args = ["--config", config]
+	var info := OS.execute_with_pipe(path, args)
 	if info.is_empty():
 		return false
 	_pid = info.pid
@@ -55,9 +61,11 @@ func launch() -> bool:
 
 
 func _read_loop() -> void:
-	while _stdio != null and _stdio.is_open():
-		var line := _stdio.get_line()
-		if line == "" and _stdio.get_error() != OK:
+	# quit() で _stdio が null にされても困らないよう、自分用の参照で読む
+	var io := _stdio
+	while io != null and io.is_open():
+		var line := io.get_line()
+		if line == "" and io.get_error() != OK:
 			break
 		if line.strip_edges() == "":
 			continue
@@ -100,9 +108,14 @@ func start(game: GameState) -> void:
 	var queue := [PieceData.NAMES[game.piece]]
 	for p in game.next_queue():
 		queue.append(PieceData.NAMES[p])
+	# TBP には「このミノではもうホールドした」を伝える項目がない。ホールド済みのときは
+	# ホールドを今のミノと同じ種類と伝え、ホールドしてもしなくても今のミノを置く手になるようにする
+	var hold = null if game.hold_piece == PieceData.NONE else PieceData.NAMES[game.hold_piece]
+	if game.hold_used:
+		hold = PieceData.NAMES[game.piece]
 	_send({
 		"type": "start",
-		"hold": null if game.hold_piece == PieceData.NONE else PieceData.NAMES[game.hold_piece],
+		"hold": hold,
 		"queue": queue,
 		"combo": game.combo + 1 if game.combo >= 0 else 0,
 		"back_to_back": game.b2b >= 0,

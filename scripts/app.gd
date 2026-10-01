@@ -5,6 +5,7 @@ enum Mode { SPRINT_40L, MARATHON }
 
 const SAVE_PATH := "user://save.json"
 const MODE_KEYS := {Mode.SPRINT_40L: "mode_40l", Mode.MARATHON: "mode_marathon"}  # Loc のキー
+const ASSIST_MODES := ["off", "free", "six_three"]
 const SOFT_DROP_INSTANT := 0    # soft_drop がこの値なら即座に一番下まで
 # 見た目の一覧。テイストを増やすときはここに追加する
 const SKINS := {"pop": preload("res://scripts/skin/pop_skin.gd")}
@@ -22,7 +23,7 @@ const DEFAULT_SETTINGS := {
 	"label_style": "auto",      # auto / xbox / ps
 	"language": "",             # 空なら OS の言語に合わせる
 	"skin": "pop",
-	"assist": false,            # 40ラインで Cold Clear 2 のおすすめを出す
+	"assist": "off",            # 40ラインのアシスト: off / free（自由に積む）/ six_three（6-3 積み）
 }
 
 var mode := Mode.SPRINT_40L
@@ -32,6 +33,8 @@ var marathon_best_score := 0
 var versus_level := 3           # 1〜5、6 は隠しの TAS
 var versus_first_to := 2
 var versus_records := {}        # 強さ → [勝ち, 負け]
+var demo := false               # CPU 同士のデモを見ている（保存しない）
+var demo_levels := [4, 4]       # デモの左右の CPU の強さ
 var settings := DEFAULT_SETTINGS.duplicate()
 var bindings := {}              # {"pad": {action: [button]}, "key": {action: [keycode]}}。空なら既定
 var skin: UiSkin
@@ -101,6 +104,7 @@ func save() -> void:
 		"versus_level": versus_level,
 		"versus_first_to": versus_first_to,
 		"versus_records": versus_records,
+		"demo_levels": demo_levels,
 		"settings": settings,
 		"bindings": bindings,
 	}, "\t"))
@@ -116,6 +120,10 @@ func _load() -> void:
 	marathon_best_score = int(data.get("marathon_best_score", 0))
 	versus_level = clampi(int(data.get("versus_level", 3)), 1, 5)  # 隠しの TAS は毎回コマンドで出す
 	versus_first_to = clampi(int(data.get("versus_first_to", 2)), 1, 3)
+	var saved_demo = data.get("demo_levels", [4, 4])
+	if saved_demo is Array and saved_demo.size() == 2:
+		# 隠しの TAS は保存しない（毎回コマンドで出す）
+		demo_levels = [clampi(int(saved_demo[0]), 1, 5), clampi(int(saved_demo[1]), 1, 5)]
 	var records = data.get("versus_records", {})
 	if records is Dictionary:
 		for k in records:
@@ -125,6 +133,9 @@ func _load() -> void:
 		if saved.has(k):
 			# JSON の数値は float で戻るので既定値の型に合わせる
 			settings[k] = type_convert(saved[k], typeof(DEFAULT_SETTINGS[k]))
+	# 前の版はアシストがオン / オフだった（true は「フリー」に引き継ぐ）
+	if settings.assist not in ASSIST_MODES:
+		settings.assist = "free" if settings.assist == "true" else "off"
 	var saved_bindings = data.get("bindings", {})
 	if saved_bindings is Dictionary:
 		for kind in saved_bindings:

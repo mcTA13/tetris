@@ -30,6 +30,9 @@ func _init() -> void:
 	test_ai_finds_tspin_double()
 	test_ai_performs_tspin_double()
 	test_cold_clear_coordinates()
+	test_b2b_tspin_then_tetris_with_input()
+	test_b2b_tsd_locked_by_delay()
+	test_b2b_tsd_while_soft_dropping()
 	test_cold_clear_suggests_tspin_double()
 	print("\n%d checks, %d failed" % [_count, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -180,7 +183,7 @@ func test_all_spin_immobile() -> void:
 	check(g.board.fits(PieceData.S, 0, g.pos), "Sスピン: はまる位置")
 	g._last_was_rotation = true
 	var info := g._detect_spin()
-	check(info.spin == GameState.Spin.MINI and info.piece == PieceData.S, "Sスピン: 動けなければスピン(Mini扱い)")
+	check(info.spin == GameState.Spin.NONE, "T 以外は動けない位置で回してもスピンにならない")
 	g._last_was_rotation = false
 	check(g._detect_spin().spin == GameState.Spin.NONE, "最後の操作が回転でなければスピンではない")
 	var g4 := make_game([], PieceData.T, 0, Vector2i(3, 30))
@@ -516,3 +519,91 @@ func test_cold_clear_suggests_tspin_double() -> void:
 		var rows := CpuBrain.rows_from(g.board)
 		check(CpuBrain.path_to(rows, g.piece, Vector3i(g.pos.x, g.pos.y, g.rot), move) != null,
 			"CC: 提案された置き場所まで自前の探索で行ける (%s)" % str(move))
+
+
+# ---------------- B2B（実際の操作に近い流れ） ----------------
+
+## TSD の形の下に TETRIS 用の 4 段（右端が井戸）を置いた盤面
+func _tsd_then_tetris_game() -> GameState:
+	return make_game([
+		"XXX.......",
+		"XX...XXXXX",
+		"XXX.XXXXXX",
+		"XXXXXXXXX.",
+		"XXXXXXXXX.",
+		"XXXXXXXXX.",
+		"XXXXXXXXX.",
+		"X.XXXXXXXX",
+	], PieceData.T, 0, Vector2i(3, 19))
+
+
+## 1 tick ずつ入力を流す
+func _press(h: InputHandler, g: GameState, action: String, hold_ticks := 1) -> void:
+	for i in hold_ticks:
+		h.update({action: true}, {action: i == 0})
+		g.tick()
+	h.update({}, {})
+	g.tick()
+
+
+func _settle(g: GameState) -> void:
+	for _i in 60:
+		if g.can_control() and g.pieces_placed > 0:
+			return
+		g.tick()
+
+
+func test_b2b_tspin_then_tetris_with_input() -> void:
+	var g := _tsd_then_tetris_game()
+	g.hold_used = true
+	var ev := capture(g)
+	var h := InputHandler.new(g)
+	# T を右に 1 回して（東向き）、左へ 1 マス、その場落下 → 右回転で TSD
+	_press(h, g, "rotate_cw")
+	_press(h, g, "left")
+	g.sonic_drop()
+	_press(h, g, "rotate_cw")
+	_press(h, g, "hard_drop")
+	var c1 := find_event(ev, "clear")
+	check(c1.get("spin") == GameState.Spin.FULL and c1.get("lines") == 2, "B2B: 入力で TSD (%s)" % str(c1))
+	_settle(g)
+	ev.clear()
+	_drop_i_right(g)
+	var c2 := find_event(ev, "clear")
+	check(c2.get("lines") == 4 and c2.get("b2b") == 1, "B2B: TSD のあとの TETRIS は B2B (%s)" % str(c2))
+	check(g.b2b == 1, "B2B: 連続回数が 1")
+
+
+func test_b2b_tsd_locked_by_delay() -> void:
+	var g := _tsd_then_tetris_game()
+	var ev := capture(g)
+	g.piece = PieceData.T
+	g.rot = 1
+	g.pos = Vector2i(2, 32)  # TSD の穴（この盤面では上から 32 段目）の上で東向き
+	check(g.rotate(1), "B2B(遅延): 回せる")
+	for _i in GameState.LOCK_DELAY + 2:
+		g.tick()
+	var c1 := find_event(ev, "clear")
+	check(c1.get("spin") == GameState.Spin.FULL, "B2B(遅延): ロックディレイで固定しても Tスピン (%s)" % str(c1))
+
+
+func test_b2b_tsd_while_soft_dropping() -> void:
+	var g := _tsd_then_tetris_game()
+	g.hold_used = true
+	var ev := capture(g)
+	var h := InputHandler.new(g)
+	_press(h, g, "rotate_cw")
+	_press(h, g, "left")
+	# ソフトドロップを押しっぱなしで下まで落とし、押したまま回す
+	for _i in 120:
+		h.update({"soft_drop": true}, {})
+		g.tick()
+		if g.is_grounded():
+			break
+	h.update({"soft_drop": true, "rotate_cw": true}, {"rotate_cw": true})
+	g.tick()
+	for _i in GameState.LOCK_DELAY + 2:
+		h.update({"soft_drop": true}, {})
+		g.tick()
+	var c1 := find_event(ev, "clear")
+	check(c1.get("spin") == GameState.Spin.FULL and c1.get("lines") == 2, "B2B(ソフトドロップ中): TSD になる (%s)" % str(c1))
