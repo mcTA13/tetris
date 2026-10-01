@@ -30,10 +30,15 @@ Godot 4.7.2 の export templates を入れてから:
 powershell -ExecutionPolicy Bypass -File tools/export.ps1
 ```
 
-`build/` に `Tetris.exe`（データ埋め込み）、`lib/cold-clear-2.exe`、`licenses/` が並び、
-配布用に `dist/Tetris-windows-x86_64.zip` ができる。
+`build/` に `Tetris.exe`（データ埋め込み）、`lib/cold-clear-2.exe`、`licenses/` が並ぶ。
+配布用の `dist/Tetris-windows-x86_64.zip` も作られる。
 
-アイコン（`assets/icon/`）を作り直すときは `godot --path . tools/make_icon.tscn` のあと `python tools/pack_ico.py`。
+アイコン（`assets/icon/`）は、次の順に実行して作り直す。
+
+```
+godot --path . tools/make_icon.tscn
+python tools/pack_ico.py
+```
 
 ## 構成
 
@@ -50,7 +55,8 @@ powershell -ExecutionPolicy Bypass -File tools/export.ps1
 ## CPU（Cold Clear 2）
 
 Lv.4・Lv.5・TAS は [Cold Clear 2](https://github.com/MinusKelvin/cold-clear-2)（MinusKelvin 作、MIT / Apache-2.0）を
-外部プロセスとして起動し、Tetris Bot Protocol（標準入出力の JSON）で置き場所を聞いている。
+外部プロセスとして起動する。
+置き場所は Tetris Bot Protocol（標準入出力の JSON）で聞く。
 `lib/cold-clear-2.exe` が見つからないときは自前の思考で代わりに戦う。
 
 作り直すとき（Rust が必要）:
