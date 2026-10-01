@@ -246,15 +246,17 @@ func _draw() -> void:
 			var flash: float = _lock_flash.get(Vector2i(x, y), 0.0) / LOCK_FLASH_TIME * 0.7
 			_draw_board_cell(Vector2i(x, y), v, UiSkin.CellStyle.NORMAL, flash)
 
-	# ゴーストと操作中のミノ
+	# アシストのガイド（ゴーストより奥）、ゴースト、操作中のミノ
 	if game.can_control():
 		var ghost := Vector2i(game.pos.x, game.ghost_y())
+		var pulse := 0.5 + 0.5 * sin(_time * 8.0)
+		var on_guide := _ghost_on_guide(ghost)
+		if not _guide.is_empty() and not on_guide:
+			skin.draw_guide_outline(self, _outline_segments(_guide.type, _guide.rot, _guide.pos), _guide.type, pulse)
+		# ゴーストがガイドにぴったり重なったら、ゴーストを光らせて知らせる
+		var ghost_style := UiSkin.CellStyle.GHOST_MATCH if on_guide else UiSkin.CellStyle.GHOST
 		for c in PieceData.cells(game.piece, game.rot):
-			_draw_board_cell(ghost + c, game.piece, UiSkin.CellStyle.GHOST)
-		if not _guide.is_empty():
-			var pulse := 0.5 + 0.5 * sin(_time * 8.0)
-			for c in PieceData.cells(_guide.type, _guide.rot):
-				_draw_board_cell(_guide.pos + c, _guide.type, UiSkin.CellStyle.GUIDE, pulse)
+			_draw_board_cell(ghost + c, game.piece, ghost_style, pulse)
 		for c in PieceData.cells(game.piece, game.rot):
 			_draw_board_cell(game.pos + c, game.piece)
 
@@ -285,6 +287,40 @@ func _draw() -> void:
 	fx.draw_particles(self, skin)
 	fx.draw_popups(self, skin, rect.get_center() + Vector2(0, -2 * cell), cell / 30.0)
 	fx.draw_flash(self, skin, rect.grow(skin.border))
+
+
+## ゴーストがガイドと同じマスを占めているか（O のように向きが違っても同じ形なら一致）
+func _ghost_on_guide(ghost: Vector2i) -> bool:
+	if _guide.is_empty() or _guide.hold or _guide.type != game.piece:
+		return false
+	var a := {}
+	for c in PieceData.cells(game.piece, game.rot):
+		a[ghost + c] = true
+	for c in PieceData.cells(_guide.type, _guide.rot):
+		if not a.has(_guide.pos + c):
+			return false
+	return true
+
+
+## ミノの外周の線分（始点・終点の組）。隣にもミノのマスがある辺は描かない
+func _outline_segments(type: int, rot: int, pos: Vector2i) -> PackedVector2Array:
+	var cells := {}
+	for c in PieceData.cells(type, rot):
+		cells[pos + c] = true
+	var segs := PackedVector2Array()
+	for c in cells:
+		if c.y - Board.HIDDEN_ROWS < -SHOW_HIDDEN_ROWS:
+			continue
+		var r := _cell_rect(c)
+		if not cells.has(c + Vector2i.UP):
+			segs.append_array([r.position, Vector2(r.end.x, r.position.y)])
+		if not cells.has(c + Vector2i.DOWN):
+			segs.append_array([Vector2(r.position.x, r.end.y), r.end])
+		if not cells.has(c + Vector2i.LEFT):
+			segs.append_array([r.position, Vector2(r.position.x, r.end.y)])
+		if not cells.has(c + Vector2i.RIGHT):
+			segs.append_array([Vector2(r.end.x, r.position.y), r.end])
+	return segs
 
 
 func _draw_counters() -> void:

@@ -3,7 +3,7 @@ extends RefCounted
 ## 見た目（テイスト）の土台。画面側はレイアウトだけを決め、描き方はすべてスキンに任せる。
 ## 新しいテイストを作るときは、これを継承して色・フォント・描き方を上書きし、App.SKINS に登録する。
 
-enum CellStyle { NORMAL, GHOST, PREVIEW, DIM, GUIDE }
+enum CellStyle { NORMAL, GHOST, PREVIEW, DIM, GHOST_MATCH }
 
 ## 色の役割。サブクラスで上書きする
 var colors := {
@@ -64,12 +64,14 @@ func draw_board(ci: CanvasItem, rect: Rect2, cell: float) -> void:
 
 # ---------------- ブロック ----------------
 
-## flash: 0〜1。固定直後などに白く光らせる量（GUIDE では点滅の強さ）
+## flash: 0〜1。固定直後などに白く光らせる量（GHOST_MATCH では点滅の強さ）
 func draw_cell(ci: CanvasItem, rect: Rect2, type: int, style := CellStyle.NORMAL, flash := 0.0) -> void:
 	var color: Color = piece_colors[type]
 	match style:
-		CellStyle.GUIDE:
-			ci.draw_rect(rect.grow(-2), Color(1, 1, 1, 0.5 + 0.5 * flash), false, 3.0)
+		CellStyle.GHOST_MATCH:
+			# アシストのガイドにゴーストが重なった: 白く光るゴースト
+			ci.draw_rect(rect.grow(-1), Color(color.lerp(Color.WHITE, 0.5), 0.35 + 0.25 * flash))
+			ci.draw_rect(rect.grow(-1), Color(1, 1, 1, 0.8 + 0.2 * flash), false, 2.0)
 			return
 		CellStyle.GHOST:
 			ci.draw_rect(rect.grow(-1), Color(color, 0.2))
@@ -177,6 +179,13 @@ func draw_menu_panel(ci: CanvasItem, center: Vector2, title: String, labels: Arr
 		draw_item(ci, rect, selected, time)
 		draw_text(ci, Vector2(rect.position.x, rect.position.y + 36), labels[i], 26,
 			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
+
+
+## アシストのおすすめの置き場所。segments はミノの外周の線分（2 点ずつ）、type はミノの種類、pulse: 0〜1
+func draw_guide_outline(ci: CanvasItem, segments: PackedVector2Array, type: int, pulse: float) -> void:
+	var color := Color(piece_colors[type], 0.6 + 0.4 * pulse)
+	for i in range(0, segments.size(), 2):
+		ci.draw_dashed_line(segments[i], segments[i + 1], color, 2.0, 5.0)
 
 
 ## アシストでホールドをすすめるときに枠を光らせる。pulse: 0〜1

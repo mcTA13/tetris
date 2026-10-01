@@ -67,9 +67,9 @@ func draw_cell(ci: CanvasItem, rect: Rect2, type: int, style := CellStyle.NORMAL
 		CellStyle.GHOST:
 			_box(Color(color, 0.18), Color(color, 0.85), 2, corner, Color.TRANSPARENT).draw(ci.get_canvas_item(), r)
 			return
-		CellStyle.GUIDE:
-			# アシストのおすすめ: 白く点滅する太い枠（ゴーストと見分けやすく）
-			_box(Color(1, 1, 1, 0.22 + 0.2 * flash), Color(1, 1, 1, 0.7 + 0.3 * flash), 3, 4, Color.TRANSPARENT).draw(ci.get_canvas_item(), r.grow(-1))
+		CellStyle.GHOST_MATCH:
+			# アシストのガイドにゴーストが重なった: ミノの色を明るくして白く光らせる
+			_box(Color(color.lerp(Color.WHITE, 0.45), 0.45 + 0.25 * flash), Color(1, 1, 1, 0.85 + 0.15 * flash), 3, corner, Color.TRANSPARENT).draw(ci.get_canvas_item(), r)
 			return
 		CellStyle.DIM:
 			color = Color("c9c4dc")
@@ -159,6 +159,13 @@ func draw_popup(ci: CanvasItem, center: Vector2, lines: Array, t: float, duratio
 func draw_flash(ci: CanvasItem, rect: Rect2, alpha: float) -> void:
 	# 盤面の角丸に合わせて光らせる
 	_box(Color(1, 1, 1, alpha), Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(ci.get_canvas_item(), rect)
+
+
+func draw_guide_outline(ci: CanvasItem, segments: PackedVector2Array, type: int, pulse: float) -> void:
+	# ミノの色の点線で外周だけをなぞる（中は塗らない。実線のゴーストと見分けられるように）
+	var color := Color(piece_colors[type].lightened(0.25), 0.7 + 0.3 * pulse)
+	for i in range(0, segments.size(), 2):
+		ci.draw_dashed_line(segments[i], segments[i + 1], color, 3.0, 6.0)
 
 
 func draw_guide_box(ci: CanvasItem, rect: Rect2, pulse: float) -> void:

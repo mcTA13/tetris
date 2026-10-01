@@ -21,5 +21,18 @@ func _ready() -> void:
 		else:
 			var target := {"x": guide.pos.x, "y": guide.pos.y, "rot": guide.rot, "spin": 0}
 			print("reachable=%s" % (CpuBrain.path_to(CpuBrain.rows_from(g.board), type, start, target) != null))
+	# ミノをずらして、ガイドとゴーストが離れた状態も撮る
+	if g.board.fits(g.piece, g.rot, g.pos + Vector2i(3, 0)):
+		g.pos.x += 3
+		for _i in 5:
+			await get_tree().process_frame
 	get_viewport().get_texture().get_image().save_png(out_dir + "/assist.png")
+	# ゴーストをガイドに合わせると光るか（ホールドのおすすめでないとき）
+	if not guide.is_empty() and not guide.hold and g.board.fits(g.piece, guide.rot, Vector2i(guide.pos.x, g.pos.y)):
+		g.rot = guide.rot
+		g.pos.x = guide.pos.x
+		for _i in 5:
+			await get_tree().process_frame
+		print("ghost on guide=%s" % scene._field._ghost_on_guide(Vector2i(g.pos.x, g.ghost_y())))
+		get_viewport().get_texture().get_image().save_png(out_dir + "/assist_match.png")
 	get_tree().quit()
