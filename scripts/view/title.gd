@@ -1,6 +1,7 @@
 extends Node2D
-## タイトル。左に大分類のメニュー（カーソルを合わせた大分類の中身が開く）、
+## タイトル。左に大分類のメニュー（決定した大分類の中身が開く）、
 ## 右に選んでいるものの説明・記録と、CPU（Lv.4）が積み続ける小さなデモ盤面。
+## 新しい版があれば、メニューの最後に「アップデート」が出る。
 
 const CATEGORIES := [
 	{"key": "cat_solo", "items": ["40l", "marathon", "ultra", "dig"]},
@@ -8,6 +9,7 @@ const CATEGORIES := [
 	{"key": "cat_versus", "items": ["versus", "demo"]},
 	{"key": "menu_settings", "items": []},  # 中身なし: 決定でそのまま設定画面へ
 ]
+const UPDATE_CATEGORY := {"key": "menu_update", "items": []}
 const ITEM_LABELS := {
 	"40l": "mode_40l", "marathon": "mode_marathon", "ultra": "mode_ultra", "dig": "mode_dig",
 	"practice": "mode_practice", "versus": "mode_versus", "demo": "mode_demo",
@@ -26,6 +28,7 @@ const DEMO_CELL := 16.0
 const DEMO_POS := Vector2(1020, 280)
 const DEMO_LEVEL := 4
 
+var _categories: Array = CATEGORIES.duplicate()
 var _cat := 0                   # カーソルのある大分類
 var _item := -1                 # 大分類の中の項目（-1 は大分類そのもの）
 var _time := 0.0
@@ -36,11 +39,13 @@ var _demo_cpu: CpuPlayer
 
 func _ready() -> void:
 	Bgm.stop()
+	_refresh_update()
+	Updater.changed.connect(_refresh_update)
 	# ゲームから戻ってきたら、遊んでいたモードにカーソルを合わせる
-	for i in CATEGORIES.size():
-		if CATEGORIES[i].key == App.menu_category:
+	for i in _categories.size():
+		if _categories[i].key == App.menu_category:
 			_cat = i
-			var items: Array = CATEGORIES[i].items
+			var items: Array = _categories[i].items
 			for j in items.size():
 				if (items[j] == "demo" and App.demo) or (ITEM_MODES.get(items[j], -1) == App.mode and not App.demo):
 					_item = j
@@ -52,6 +57,12 @@ func _ready() -> void:
 	add_child(_demo_view)
 	_demo_view.set_base_position(DEMO_POS)
 	_restart_demo()
+
+
+## 新しい版が見つかったら、メニューの最後に「アップデート」を足す
+func _refresh_update() -> void:
+	if Updater.available and not _categories.has(UPDATE_CATEGORY):
+		_categories.append(UPDATE_CATEGORY)
 
 
 func _exit_tree() -> void:
@@ -79,6 +90,8 @@ func _physics_process(_delta: float) -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	queue_redraw()
+	if Updater.downloading:
+		return  # ダウンロードが終わるとゲームを終えてインストーラーを動かすので、ほかの画面には行かせない
 	match InputSetup.menu_direction(delta):
 		"down":
 			_move(1)
@@ -99,26 +112,28 @@ func _process(delta: float) -> void:
 ## 上下の移動。大分類を選んでいるときは大分類の間だけ、項目を選んでいるときはその大分類の中だけ
 func _move(step: int) -> void:
 	if _item < 0:
-		_cat = (_cat + step + CATEGORIES.size()) % CATEGORIES.size()
-		App.menu_category = CATEGORIES[_cat].key
+		_cat = (_cat + step + _categories.size()) % _categories.size()
+		App.menu_category = _categories[_cat].key
 	else:
-		var count: int = CATEGORIES[_cat].items.size()
+		var count: int = _categories[_cat].items.size()
 		_item = (_item + step + count) % count
 	Sfx.play("menu_move")
 
 
 func _select() -> void:
-	var items: Array = CATEGORIES[_cat].items
+	var items: Array = _categories[_cat].items
 	Sfx.play("menu_select")
 	if _item < 0:
-		if items.is_empty():
+		if _categories[_cat].key == "menu_update":
+			Updater.start()
+		elif items.is_empty():
 			get_tree().change_scene_to_file("res://scenes/settings.tscn")
 		else:
 			_item = 0
-			App.menu_category = CATEGORIES[_cat].key
+			App.menu_category = _categories[_cat].key
 		return
 	var item: String = items[_item]
-	App.menu_category = CATEGORIES[_cat].key
+	App.menu_category = _categories[_cat].key
 	match item:
 		"versus", "demo":
 			App.demo = item == "demo"
@@ -151,13 +166,14 @@ func _draw() -> void:
 		pads.append("#%d %s" % [device, Input.get_joy_name(device)])
 	var pad_text := "%s: %s" % [Loc.t("controller"), ", ".join(pads) if pads.size() > 0 else Loc.t("not_found")]
 	skin.draw_text(self, Vector2(0, 704), pad_text, 14, "text_dim", HORIZONTAL_ALIGNMENT_CENTER, 1280)
+	skin.draw_text(self, Vector2(1260 - 200, 704), "v" + Updater.current_version(), 14, "text_dim", HORIZONTAL_ALIGNMENT_RIGHT, 200)
 
 
 ## 左のメニュー。大分類は決定するまで閉じたまま、開いている大分類だけ中身を見せる
 func _draw_menu(skin: UiSkin) -> void:
 	var y := MENU_TOP
-	for i in CATEGORIES.size():
-		var c: Dictionary = CATEGORIES[i]
+	for i in _categories.size():
+		var c: Dictionary = _categories[i]
 		var rect := Rect2(MENU_X, y, MENU_W, CAT_H - 8)
 		var selected := i == _cat and _item < 0
 		var open := i == _cat and _item >= 0
@@ -187,10 +203,12 @@ func _draw_menu(skin: UiSkin) -> void:
 ## 右のパネル: 名前・説明・記録と、デモ盤面の見出し
 func _draw_preview(skin: UiSkin) -> void:
 	skin.draw_panel(self, PANEL)
-	var c: Dictionary = CATEGORIES[_cat]
+	var c: Dictionary = _categories[_cat]
 	var item: String = c.items[_item] if _item >= 0 else ""
 	var title := Loc.t(ITEM_LABELS[item]) if item != "" else Loc.t(c.key)
 	var desc := Loc.t("desc_" + item) if item != "" else Loc.t("desc_" + c.key)
+	if c.key == "menu_update":
+		desc = _update_text()
 	var left := PANEL.position.x + 36
 	var text_w := DEMO_POS.x - left - 30
 	skin.draw_text(self, Vector2(left, PANEL.position.y + 70), title, 40, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
@@ -202,6 +220,8 @@ func _draw_preview(skin: UiSkin) -> void:
 			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + Loc.t(ITEM_LABELS[c.items[j]]), 24,
 				"text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	var record := _record_text(item)
+	if c.key == "menu_update":
+		record = "v%s → v%s" % [Updater.current_version(), Updater.latest_version]
 	if record != "":
 		skin.draw_text(self, Vector2(left, PANEL.end.y - 40), record, 24, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	# デモ盤面の見出し
@@ -222,6 +242,14 @@ func _draw_wrapped(skin: UiSkin, text: String, pos: Vector2, width: float, size:
 		line += ch
 	if line != "":
 		skin.draw_text(self, Vector2(pos.x, y), line, size, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+
+
+func _update_text() -> String:
+	if Updater.downloading:
+		return Loc.t("update_downloading") % roundi(Updater.progress() * 100)
+	if Updater.failed:
+		return Loc.t("update_failed")
+	return Loc.t("desc_menu_update" if Updater.is_installed() else "desc_menu_update_page") % Updater.latest_version
 
 
 func _record_text(item: String) -> String:

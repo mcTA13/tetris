@@ -8,6 +8,7 @@ var _count := 0
 func _init() -> void:
 	test_bag_is_7_bag()
 	test_bag_remaining_after()
+	test_update_version_compare()
 	test_kick_tables_are_mirrored()
 	test_spawn_position()
 	test_tspin_double()
@@ -90,6 +91,14 @@ func test_bag_is_7_bag() -> void:
 	var b := Bag.new(42)
 	check(a.peek(14) == b.peek(14), "同じシードなら同じ順番")
 
+
+func test_update_version_compare() -> void:
+	var U := preload("res://scripts/updater.gd")
+	check(U.is_newer("v1.4", "1.3"), "v1.4 は 1.3 より新しい")
+	check(U.is_newer("v1.10", "1.9"), "v1.10 は 1.9 より新しい（数字で比べる）")
+	check(U.is_newer("v1.3.1", "1.3"), "v1.3.1 は 1.3 より新しい")
+	check(not U.is_newer("v1.3", "1.3"), "同じ版は新しくない")
+	check(not U.is_newer("v1.2", "1.3"), "古い版は新しくない")
 
 func test_bag_remaining_after() -> void:
 	var seq := Bag.new(7).peek(70)

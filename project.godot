@@ -18,6 +18,7 @@ Loc="*res://scripts/locale.gd"
 App="*res://scripts/app.gd"
 Sfx="*res://scripts/audio/sfx.gd"
 Bgm="*res://scripts/audio/bgm.gd"
+Updater="*res://scripts/updater.gd"
 
 [display]
 

@@ -24,14 +24,18 @@ godot --headless --path . -s tests/run_tests.gd
 
 ## 書き出し（Windows）
 
-Godot 4.7.2 の export templates を入れてから:
+Godot 4.7.2 の export templates と Inno Setup 6（`winget install JRSoftware.InnoSetup`）を入れてから:
 
 ```
 powershell -ExecutionPolicy Bypass -File tools/export.ps1
 ```
 
 `build/` に `Tetris.exe`（データ埋め込み）、`lib/cold-clear-2.exe`、`licenses/` が並ぶ。
-配布用の `dist/Tetris-windows-x86_64.zip` も作られる。
+配布用の `dist/Tetris-windows-x86_64.zip` と、インストーラー `dist/Tetris-Setup-v<バージョン>.exe`（`tools/installer.iss`）も作られる。
+
+ゲームは起動時に GitHub の最新リリースを確かめ、新しい版があればタイトルに「アップデート」を出す。
+インストーラーで入れた場合は、リリースの `Tetris-Setup-v*.exe` をダウンロードして確認なしで上書きし、起動し直す。
+そのため、リリースには必ずインストーラーを添付する（バージョンは `project.godot` の `config/version` と `export_presets.cfg` をそろえて上げる）。
 
 アイコン（`assets/icon/`）は、次の順に実行して作り直す。
 
