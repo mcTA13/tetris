@@ -3,6 +3,7 @@ class_name Bag
 
 var _rng := RandomNumberGenerator.new()
 var _queue: Array[int] = []
+var _taken := 0                 # これまでに取り出した数（1巡の区切りを知るため）
 
 
 func _init(seed_value: int = 0) -> void:
@@ -22,7 +23,17 @@ func peek(count: int) -> Array[int]:
 func pop() -> int:
 	if _queue.is_empty():
 		_refill()
+	_taken += 1
 	return _queue.pop_front()
+
+
+## 先頭から visible 個を見たあと、その 1 巡にまだ残っているミノ（見たものが 1 巡の終わりなら次の 1 巡の全種類）
+func remaining_after(visible: int) -> Array[int]:
+	var end := visible + (7 - (_taken + visible) % 7) % 7
+	var rest := peek(maxi(end, visible)).slice(visible)
+	if rest.is_empty():
+		rest.assign(PieceData.ALL)
+	return rest
 
 
 func _refill() -> void:

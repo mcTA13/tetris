@@ -17,14 +17,19 @@ const CONFIG := {
 	1: {"pps": 0.7, "interval": 6, "depth": 1, "beam": 1, "spins": false, "use_hold": false, "mistake": 0.3, "mistake_margin": 40.0, "clean": true},
 	2: {"pps": 1.2, "interval": 5, "depth": 1, "beam": 1, "spins": false, "use_hold": true, "mistake": 0.12, "mistake_margin": 20.0, "clean": true},
 	3: {"pps": 1.8, "interval": 4, "depth": 2, "beam": 3, "spins": true, "use_hold": true, "mistake": 0.04, "mistake_margin": 5.0, "clean": true, "attack_weight": 8.0},
-	4: {"pps": 2.5, "interval": 3, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
+	# Lv.4: 上級者くらいの速さ（2 PPS、1 マス 4F で動かす）
+	4: {"pps": 2.0, "interval": 4, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
 		"cold_clear": true, "think_ticks": 6},
-	5: {"pps": 3.5, "interval": 2, "depth": 2, "beam": 6, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
-		"cold_clear": true, "think_ticks": 15},
+	# Lv.5: 人が出せる速さの上限（3 PPS、横移動の押しっぱなしと同じ 1 マス 2F で動かす）で、考える力は最大
+	5: {"pps": 3.0, "interval": 2, "depth": 2, "beam": 6, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
+		"cold_clear": true, "think_ticks": 3},
 	TAS_LEVEL: {"pps": 10.0, "interval": 0, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
 		"cold_clear": true, "think_ticks": 4},
 }
 const TAS_STEPS_PER_TICK := 12
+const RESTART_THINK_TICKS := 6  # Cold Clear 2 が一から考え直すとき（おじゃまのせり上がりなど）に最低限考えさせる時間
+const BOT_RETRY_TICKS := 2      # Cold Clear 2 の答えが空だったとき、聞き直すまでの時間
+const BOT_MAX_RETRIES := 10     # これを超えたら自前の思考で置き場所を決める
 
 var game: GameState
 var level := 3
@@ -46,6 +51,7 @@ var _input_cooldown := 0
 var _bot: ColdClearBot          # Cold Clear 2（使わないときは null）
 var _bot_wait := -1             # 置き場所を聞くまでの残り tick。-1 は聞き済み / 使っていない
 var _bot_asked := false
+var _bot_retries := 0
 
 
 func _init(target_game: GameState, cpu_level: int) -> void:
@@ -109,9 +115,10 @@ func _start_thinking() -> void:
 	_result_ready = false
 	_bot_asked = false
 	_bot_wait = -1
+	_bot_retries = 0
 	if _bot != null and _bot.is_ready:
-		_bot.start(game)
-		_bot_wait = maxi(_config.think_ticks, 1)
+		var continued := _bot.begin(game)
+		_bot_wait = maxi(_config.think_ticks if continued else maxi(_config.think_ticks, RESTART_THINK_TICKS), 1)
 		return
 	var snapshot := {
 		"rows": CpuBrain.rows_from(game.board),
@@ -143,8 +150,16 @@ func _poll_bot() -> void:
 	if r.is_empty() or not _bot_asked:
 		return
 	_bot_asked = false
-	if not r.has("none"):
+	if r.has("none"):
+		# 考え始めたばかりで答えが空のことがある。少し待って聞き直し、だめなら自前の思考で決める
+		if _bot_retries < BOT_MAX_RETRIES:
+			_bot_retries += 1
+			_bot_wait = BOT_RETRY_TICKS
+			return
+		r = _fallback_target()
+	else:
 		r["hold"] = r.type != game.piece
+		_bot.play(r)  # 動かしている間も、Cold Clear 2 に次の手を考えさせておく
 	_mutex.lock()
 	_result = r
 	_result_ready = true

@@ -1,2 +1,2 @@
 ed8b19327b6bd1410ddd873d8611485bd45d8fae
-このコミットに COLD-CLEAR-2-PATCH.diff（井戸の列を固定する重み well_column / well_column_cells）を当ててビルド
+このコミットに COLD-CLEAR-2-PATCH.diff（井戸の列を固定する重み well_column / well_column_cells、古い探索木を別スレッドで解放する修正）を当ててビルド

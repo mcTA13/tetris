@@ -7,6 +7,7 @@ var _count := 0
 
 func _init() -> void:
 	test_bag_is_7_bag()
+	test_bag_remaining_after()
 	test_kick_tables_are_mirrored()
 	test_spawn_position()
 	test_tspin_double()
@@ -88,6 +89,22 @@ func test_bag_is_7_bag() -> void:
 	var a := Bag.new(42)
 	var b := Bag.new(42)
 	check(a.peek(14) == b.peek(14), "同じシードなら同じ順番")
+
+
+func test_bag_remaining_after() -> void:
+	var seq := Bag.new(7).peek(70)
+	for taken in 20:
+		var bag := Bag.new(7)
+		for _i in taken:
+			bag.pop()
+		var start := taken + 5
+		var expected := seq.slice(start, (start + 6) / 7 * 7)
+		if expected.is_empty():
+			expected.assign(PieceData.ALL)
+		var got := bag.remaining_after(5)
+		got.sort()
+		expected.sort()
+		check(got == expected, "NEXT 5 個のあとの 1 巡の残り（%d 個取り出した後）" % taken)
 
 
 func test_kick_tables_are_mirrored() -> void:

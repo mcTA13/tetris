@@ -2,7 +2,8 @@ class_name ColdClearBot
 extends RefCounted
 ## Cold Clear 2（MinusKelvin 作、MIT / Apache-2.0）を外部プロセスとして動かし、
 ## Tetris Bot Protocol（1 行 1 件の JSON を標準入出力でやり取り）で置き場所を聞く。
-## ミノが出るたびに盤面ごと送り直す（おじゃまのせり上がりでずれないように）。
+## 選んだ手を play で伝えると、Cold Clear 2 は次のミノの手を考え続ける（読みを捨てずに済む）。
+## 次のミノが出たとき盤面が思った通りでなければ（おじゃまのせり上がりなど）、盤面ごと送り直す。
 
 const EXE_NAME := "cold-clear-2.exe"
 const ORIENTATIONS := ["north", "east", "south", "west"]
@@ -20,6 +21,11 @@ var _reader: Thread
 var _mutex := Mutex.new()
 var _lines: Array[String] = []
 var _running := false           # start を送って計算中
+# Cold Clear 2 が思っている状態（play を送ったあと、そのまま続けられるか確かめるため）
+var _known_queue: Array[int] = []  # 今のミノ＋NEXT
+var _known_hold := PieceData.NONE
+var _expected_rows := PackedInt32Array()
+var _can_continue := false
 
 
 ## 実行ファイルの場所（書き出し後はゲームの exe の隣の lib/、エディタではプロジェクトの lib/）
@@ -90,8 +96,59 @@ func poll() -> Dictionary:
 				is_ready = true
 			"suggestion":
 				var moves: Array = msg.get("moves", [])
-				result = {"none": true} if moves.is_empty() else to_target(moves[0])
+				if moves.is_empty():
+					result = {"none": true}
+				else:
+					result = to_target(moves[0])
+					result["tbp"] = moves[0]
 	return result
+
+
+## 新しいミノが出たときに呼ぶ。前に play した続きのままなら、増えた NEXT だけを伝える。
+## そうでなければ盤面ごと送り直す（このときは false を返す。一から考え直しになる）
+func begin(game: GameState) -> bool:
+	if _continue(game):
+		return true
+	start(game)
+	return false
+
+
+func _continue(game: GameState) -> bool:
+	if not _can_continue or game.hold_used or game.hold_piece != _known_hold:
+		return false
+	if CpuBrain.rows_from(game.board) != _expected_rows:
+		return false
+	var queue: Array[int] = [game.piece]
+	queue.append_array(game.next_queue())
+	if queue.size() < _known_queue.size() or queue.slice(0, _known_queue.size()) != _known_queue:
+		return false
+	for p in queue.slice(_known_queue.size()):
+		_send({"type": "new_piece", "piece": PieceData.NAMES[p]})
+	_known_queue = queue
+	return true
+
+
+## 選んだ手を伝える。Cold Clear 2 はその後の状態で次の手を考え始める
+func play(target: Dictionary) -> void:
+	if not target.has("tbp") or _known_queue.is_empty():
+		_can_continue = false
+		return
+	# JSON から読んだ数は小数になっているので、整数に戻して送る（Cold Clear 2 は小数を受け付けない）
+	var loc: Dictionary = target.tbp.location
+	_send({"type": "play", "move": {
+		"location": {"type": loc.type, "orientation": loc.orientation, "x": int(loc.x), "y": int(loc.y)},
+		"spin": target.tbp.get("spin", "none"),
+	}})
+	if _known_queue[0] != target.type:
+		# ホールドした。ホールドが空なら次のミノを置いている
+		var first: int = _known_queue.pop_front()
+		if _known_hold == PieceData.NONE:
+			_known_queue.pop_front()
+		_known_hold = first
+	else:
+		_known_queue.pop_front()
+	_expected_rows = CpuBrain.place(_expected_rows, target.type, target.rot, target.x, target.y)[0]
+	_can_continue = true
 
 
 ## 今の状態から計算を始めさせる
@@ -113,6 +170,9 @@ func start(game: GameState) -> void:
 	var hold = null if game.hold_piece == PieceData.NONE else PieceData.NAMES[game.hold_piece]
 	if game.hold_used:
 		hold = PieceData.NAMES[game.piece]
+	var bag_state := []
+	for p in game.bag.remaining_after(GameState.NEXT_COUNT):
+		bag_state.append(PieceData.NAMES[p])
 	_send({
 		"type": "start",
 		"hold": hold,
@@ -120,8 +180,13 @@ func start(game: GameState) -> void:
 		"combo": game.combo + 1 if game.combo >= 0 else 0,
 		"back_to_back": game.b2b >= 0,
 		"board": board,
+		"randomizer": {"type": "seven_bag", "bag_state": bag_state},
 	})
 	_running = true
+	_known_queue.assign([game.piece] + Array(game.next_queue()))
+	_known_hold = PieceData.NAMES.find(hold) if hold != null else PieceData.NONE
+	_expected_rows = CpuBrain.rows_from(game.board)
+	_can_continue = false
 
 
 func suggest() -> void:

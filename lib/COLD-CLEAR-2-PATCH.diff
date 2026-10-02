@@ -45,3 +45,38 @@ index 0a50093..88f4609 100644
      let full_lines_except_well = state
          .board
          .cols
+diff --git a/src/sync.rs b/src/sync.rs
+index 89540ac..ccfd6fd 100644
+--- a/src/sync.rs
++++ b/src/sync.rs
+@@ -32,12 +32,14 @@ impl BotSyncronizer {
+         state.stats = Default::default();
+         state.nodes_since_start = 0;
+         state.start = Instant::now();
+-        *self.bot.write() = Some(initial_state);
++        let old = std::mem::replace(&mut *self.bot.write(), Some(initial_state));
++        drop_in_background(old);
+         self.blocker.notify_all();
+     }
+ 
+     pub fn stop(&self) {
+-        *self.bot.write() = None;
++        let old = self.bot.write().take();
++        drop_in_background(old);
+     }
+ 
+     pub fn suggest(&self) -> Option<(Vec<Placement>, MoveInfo)> {
+@@ -105,6 +107,13 @@ impl BotSyncronizer {
+     }
+ }
+ 
++/// Freeing a large search tree can take hundreds of milliseconds, so do it off the message loop.
++fn drop_in_background(bot: Option<Bot>) {
++    if let Some(bot) = bot {
++        std::thread::spawn(move || drop(bot));
++    }
++}
++
+ #[derive(Copy, Clone, Debug)]
+ struct State {
+     stats: Statistics,
