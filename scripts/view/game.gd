@@ -112,6 +112,7 @@ func _new_game(countdown := true) -> void:
 	_practice_result = ""
 	_practice_timer = 0
 	if countdown:
+		Bgm.stop()  # GO! の後から流し直す
 		Sfx.play("ready")
 	else:
 		_countdown = 0
@@ -119,6 +120,7 @@ func _new_game(countdown := true) -> void:
 
 
 func _start_game() -> void:
+	Bgm.play()
 	if App.mode == App.Mode.PRACTICE:
 		game.start_with(PieceData.T)
 		if _show_hint:
@@ -273,6 +275,7 @@ func _to_title() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	Bgm.set_paused(paused)
 	queue_redraw()
 	_overlay.queue_redraw()
 

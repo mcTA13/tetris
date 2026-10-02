@@ -3,11 +3,11 @@ extends Node2D
 
 const SOFT_DROP_OPTIONS := [5, 10, 20, 40, App.SOFT_DROP_INSTANT]
 const LABEL_STYLES := ["auto", "xbox", "ps"]
-const ADJUSTABLE := ["language", "skin", "se_volume", "das", "arr", "soft_drop", "line_clear_delay", "are",
+const ADJUSTABLE := ["language", "skin", "se_volume", "bgm_volume", "das", "arr", "soft_drop", "line_clear_delay", "are",
 	"das_cut", "vibration", "confirm_b", "label_style", "assist"]
 const WAIT_SECONDS := 5.0
 const PANEL := Rect2(220, 100, 840, 580)
-const ROW_H := 33
+const ROW_H := 31
 
 var _page := "main"
 var _index := 0
@@ -87,6 +87,9 @@ func _change(key: String, step: int) -> void:
 			Sfx.prepare()
 		"se_volume":
 			s.se_volume = clampi(s.se_volume + step, 0, 10)
+		"bgm_volume":
+			s.bgm_volume = clampi(s.bgm_volume + step, 0, 10)
+			Bgm.update_volume()
 		"das":
 			s.das = clampi(s.das + step, 1, 20)
 		"arr":
@@ -124,6 +127,7 @@ func _select(key: String) -> void:
 				App.bindings.erase(_page)
 			InputSetup.apply(App.bindings, App.settings.confirm_b)
 			App.apply_look()
+			Bgm.update_volume()
 			App.save()
 		"back":
 			_leave_page()
@@ -168,6 +172,8 @@ func _value(key: String) -> String:
 			return App.skin.display_name()
 		"se_volume":
 			return "%d / 10" % s.se_volume
+		"bgm_volume":
+			return "%d / 10" % s.bgm_volume
 		"das":
 			return "%d F  (%d ms)" % [s.das, roundi(s.das * 1000.0 / 60.0)]
 		"arr":

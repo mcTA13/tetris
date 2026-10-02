@@ -17,6 +17,7 @@ InputSetup="*res://scripts/input_setup.gd"
 Loc="*res://scripts/locale.gd"
 App="*res://scripts/app.gd"
 Sfx="*res://scripts/audio/sfx.gd"
+Bgm="*res://scripts/audio/bgm.gd"
 
 [display]
 

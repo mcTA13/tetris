@@ -102,6 +102,7 @@ func _new_round() -> void:
 	_go_timer = 0
 	_round_ticks = 0
 	_round_winner = -1
+	Bgm.stop()  # GO! の後から流し直す
 	Sfx.play("ready", 1.0, 0.5 if demo else 1.0)
 
 
@@ -143,6 +144,7 @@ func _physics_process(delta: float) -> void:
 				state = State.PLAYING
 				_go_timer = GO_TICKS
 				Sfx.play("go")
+				Bgm.play()
 		State.PLAYING:
 			input.update(held, pressed)
 			cpu_player.tick()
@@ -177,6 +179,7 @@ func _demo_process(pressed: Dictionary) -> void:
 				state = State.PLAYING
 				_go_timer = GO_TICKS
 				Sfx.play("go", 1.0, 0.5)
+				Bgm.play()
 		State.PLAYING:
 			_left_cpu.tick()
 			cpu_player.tick()
@@ -275,6 +278,7 @@ func _on_event(kind: String, data: Dictionary, side: int) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	Bgm.set_paused(paused)
 	for orb in _orbs:
 		orb.t += delta / ORB_TIME
 		if orb.t >= 1.0:

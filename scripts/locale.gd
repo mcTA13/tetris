@@ -104,6 +104,7 @@ const STRINGS := {
 	"set_das_cut": ["左右切り替えでDASをリセット", "RESET DAS ON SWITCH"],
 	"set_vibration": ["振動", "VIBRATION"],
 	"set_se_volume": ["効果音の音量", "SOUND VOLUME"],
+	"set_bgm_volume": ["BGMの音量", "MUSIC VOLUME"],
 	"set_assist": ["40ラインのアシスト", "40 LINES ASSIST"],
 	"set_confirm_b": ["決定ボタン", "CONFIRM BUTTON"],
 	"set_label_style": ["ボタン表記", "BUTTON LABELS"],

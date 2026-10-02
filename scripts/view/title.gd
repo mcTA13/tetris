@@ -35,6 +35,7 @@ var _demo_cpu: CpuPlayer
 
 
 func _ready() -> void:
+	Bgm.stop()
 	# ゲームから戻ってきたら、遊んでいたモードにカーソルを合わせる
 	for i in CATEGORIES.size():
 		if CATEGORIES[i].key == App.menu_category:

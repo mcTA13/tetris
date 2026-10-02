@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS := {
 	"das_cut": true,
 	"vibration": true,
 	"se_volume": 7,             # 効果音の音量 0〜10
+	"bgm_volume": 6,            # BGM の音量 0〜10
 	"confirm_b": false,         # true なら B(○) で決定
 	"label_style": "auto",      # auto / xbox / ps
 	"language": "",             # 空なら OS の言語に合わせる
