@@ -11,6 +11,7 @@ const UNINSTALLER := "unins000.exe"     # これが exe の隣にあればイン
 
 var available := false          # 新しい版がある
 var latest_version := ""
+var notes := ""                 # リリースノート（GitHub に書いた Markdown のまま）
 var downloading := false
 var failed := false
 
@@ -47,6 +48,22 @@ static func is_newer(latest: String, current: String) -> bool:
 	return false
 
 
+## リリースノートの Markdown を、画面に出す行に直す。[文字列, 見出しなら true] の並び
+static func note_lines(body: String) -> Array:
+	var out := []
+	for raw in body.split("\n"):
+		var line := raw.strip_edges().replace("**", "").replace("`", "")
+		if line == "":
+			continue
+		if line.begins_with("#"):
+			out.append([line.lstrip("#").strip_edges(), true])
+		elif line.begins_with("- ") or line.begins_with("* "):
+			out.append(["・" + line.substr(2), false])
+		else:
+			out.append([line, false])
+	return out
+
+
 func is_installed() -> bool:
 	return FileAccess.file_exists(OS.get_executable_path().get_base_dir().path_join(UNINSTALLER))
 
@@ -74,6 +91,7 @@ func _on_checked(result: int, code: int, body: PackedByteArray) -> void:
 	if not is_newer(tag, current_version()):
 		return
 	latest_version = tag.trim_prefix("v")
+	notes = str(data.get("body", ""))
 	_page_url = data.get("html_url", "")
 	for asset in data.get("assets", []):
 		var name: String = asset.get("name", "")

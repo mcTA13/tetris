@@ -99,6 +99,8 @@ func test_update_version_compare() -> void:
 	check(U.is_newer("v1.3.1", "1.3"), "v1.3.1 は 1.3 より新しい")
 	check(not U.is_newer("v1.3", "1.3"), "同じ版は新しくない")
 	check(not U.is_newer("v1.2", "1.3"), "古い版は新しくない")
+	var lines: Array = U.note_lines("## 追加\r\n\r\n- **BGM**: `曲`を追加\r\n普通の行")
+	check(lines == [["追加", true], ["・BGM: 曲を追加", false], ["普通の行", false]], "リリースノートの Markdown を画面用の行に直す")
 
 func test_bag_remaining_after() -> void:
 	var seq := Bag.new(7).peek(70)

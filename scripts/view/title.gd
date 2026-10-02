@@ -27,10 +27,15 @@ const PANEL := Rect2(560, 150, 660, 480)
 const DEMO_CELL := 16.0
 const DEMO_POS := Vector2(1020, 280)
 const DEMO_LEVEL := 4
+const NOTE_SIZE := 17
+const NOTE_LINE_H := NOTE_SIZE * 1.6
 
 var _categories: Array = CATEGORIES.duplicate()
 var _cat := 0                   # カーソルのある大分類
 var _item := -1                 # 大分類の中の項目（-1 は大分類そのもの）
+var _update_open := false       # アップデートを決定して、リリースノートを全部見ている
+var _note_scroll := 0           # リリースノートの何行目から見せるか
+var _note_rows := []            # 折り返したリリースノート [文字列, 色の役割]（最初に描くときに作る）
 var _time := 0.0
 var _demo_view := FieldView.new()
 var _demo_game: GameState
@@ -90,8 +95,12 @@ func _physics_process(_delta: float) -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	queue_redraw()
+	_demo_view.visible = _categories[_cat].key != "menu_update"  # アップデートはパネルを広く使う
 	if Updater.downloading:
 		return  # ダウンロードが終わるとゲームを終えてインストーラーを動かすので、ほかの画面には行かせない
+	if _update_open:
+		_process_update(delta)
+		return
 	match InputSetup.menu_direction(delta):
 		"down":
 			_move(1)
@@ -107,6 +116,27 @@ func _process(delta: float) -> void:
 		_select()
 	elif Input.is_action_just_pressed("back") and _item >= 0:
 		_back()
+
+
+## リリースノートを見ている間: 上下でスクロール、決定でアップデート、戻るでやめる
+func _process_update(delta: float) -> void:
+	match InputSetup.menu_direction(delta):
+		"down":
+			_note_scroll = mini(_note_scroll + 1, maxi(_note_rows.size() - _notes_visible(true), 0))
+		"up":
+			_note_scroll = maxi(_note_scroll - 1, 0)
+		"left":
+			_close_update()
+	if Input.is_action_just_pressed("accept"):
+		Sfx.play("menu_select")
+		Updater.start()
+	elif Input.is_action_just_pressed("back"):
+		_close_update()
+
+
+func _close_update() -> void:
+	Sfx.play("menu_back")
+	_update_open = false
 
 
 ## 上下の移動。大分類を選んでいるときは大分類の間だけ、項目を選んでいるときはその大分類の中だけ
@@ -125,7 +155,8 @@ func _select() -> void:
 	Sfx.play("menu_select")
 	if _item < 0:
 		if _categories[_cat].key == "menu_update":
-			Updater.start()
+			_update_open = true
+			_note_scroll = 0
 		elif items.is_empty():
 			get_tree().change_scene_to_file("res://scenes/settings.tscn")
 		else:
@@ -158,7 +189,9 @@ func _draw() -> void:
 	_draw_preview(skin)
 
 	var hint := Loc.t("hint_title") % InputSetup.action_hint("accept")
-	if _item >= 0:
+	if _update_open:
+		hint = Loc.t("hint_update") % [InputSetup.action_hint("accept"), InputSetup.action_hint("back")]
+	elif _item >= 0:
 		hint += "　%s: %s" % [InputSetup.action_hint("back"), Loc.t("set_back")]
 	skin.draw_text(self, Vector2(0, 676), hint, 18, "text", HORIZONTAL_ALIGNMENT_CENTER, 1280)
 	var pads := []
@@ -207,10 +240,11 @@ func _draw_preview(skin: UiSkin) -> void:
 	var item: String = c.items[_item] if _item >= 0 else ""
 	var title := Loc.t(ITEM_LABELS[item]) if item != "" else Loc.t(c.key)
 	var desc := Loc.t("desc_" + item) if item != "" else Loc.t("desc_" + c.key)
-	if c.key == "menu_update":
-		desc = _update_text()
 	var left := PANEL.position.x + 36
 	var text_w := DEMO_POS.x - left - 30
+	if c.key == "menu_update":
+		_draw_update(skin, left, PANEL.size.x - 72)
+		return
 	skin.draw_text(self, Vector2(left, PANEL.position.y + 70), title, 40, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	draw_line(Vector2(left, PANEL.position.y + 92), Vector2(left + text_w, PANEL.position.y + 92), skin.colors.text_dim, 2.0)
 	_draw_wrapped(skin, desc, Vector2(left, PANEL.position.y + 136), text_w, 20)
@@ -220,8 +254,6 @@ func _draw_preview(skin: UiSkin) -> void:
 			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + Loc.t(ITEM_LABELS[c.items[j]]), 24,
 				"text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	var record := _record_text(item)
-	if c.key == "menu_update":
-		record = "v%s → v%s" % [Updater.current_version(), Updater.latest_version]
 	if record != "":
 		skin.draw_text(self, Vector2(left, PANEL.end.y - 40), record, 24, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	# デモ盤面の見出し
@@ -230,26 +262,66 @@ func _draw_preview(skin: UiSkin) -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, Board.WIDTH * DEMO_CELL, true)
 
 
-## 幅に収まるように折り返して描く
-func _draw_wrapped(skin: UiSkin, text: String, pos: Vector2, width: float, size: int) -> void:
-	var line := ""
-	var y := pos.y
-	for ch in text:
-		if skin.text_width(line + ch, size, true) > width:
-			skin.draw_text(self, Vector2(pos.x, y), line, size, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
-			line = ""
-			y += size * 1.6
-		line += ch
-	if line != "":
-		skin.draw_text(self, Vector2(pos.x, y), line, size, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+## アップデートのパネル。カーソルを合わせただけなら説明とリリースノートの冒頭、決定したらリリースノートを全部（スクロール）
+func _draw_update(skin: UiSkin, left: float, width: float) -> void:
+	if _note_rows.is_empty():
+		for entry in Updater.note_lines(Updater.notes):
+			for piece in _wrap(skin, entry[0], width, NOTE_SIZE):
+				_note_rows.append([piece, "highlight" if entry[1] else "text"])
+	var title := Loc.t("update_notes_title") % Updater.latest_version if _update_open else Loc.t("menu_update")
+	skin.draw_text(self, Vector2(left, PANEL.position.y + 70), title, 40, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	draw_line(Vector2(left, PANEL.position.y + 92), Vector2(left + width, PANEL.position.y + 92), skin.colors.text_dim, 2.0)
+	var y := PANEL.position.y + 130
+	if not _update_open:
+		y = _draw_wrapped(skin, Loc.t("desc_menu_update") % Updater.latest_version, Vector2(left, y), width, 20) + 12
+	var count := _notes_visible(_update_open)
+	var first := _note_scroll if _update_open else 0
+	for i in range(first, mini(first + count, _note_rows.size())):
+		skin.draw_text(self, Vector2(left, y), _note_rows[i][0], NOTE_SIZE, _note_rows[i][1], HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+		y += NOTE_LINE_H
+	# 続きがあることを示す
+	if first + count < _note_rows.size():
+		skin.draw_text(self, Vector2(left, y), "▼", NOTE_SIZE, "text_dim", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	var bottom := "v%s → v%s" % [Updater.current_version(), Updater.latest_version]
+	if _update_open or Updater.downloading or Updater.failed:
+		bottom = _update_status()
+	skin.draw_text(self, Vector2(left, PANEL.end.y - 30), bottom, 22, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 
 
-func _update_text() -> String:
+## リリースノートを何行見せられるか（決定前は説明の下に冒頭だけ）
+func _notes_visible(open: bool) -> int:
+	return 11 if open else 7
+
+
+func _update_status() -> String:
 	if Updater.downloading:
 		return Loc.t("update_downloading") % roundi(Updater.progress() * 100)
 	if Updater.failed:
 		return Loc.t("update_failed")
-	return Loc.t("desc_menu_update" if Updater.is_installed() else "desc_menu_update_page") % Updater.latest_version
+	return Loc.t("update_confirm" if Updater.is_installed() else "update_confirm_page")
+
+
+## 幅に収まるように折り返す
+func _wrap(skin: UiSkin, text: String, width: float, size: int) -> PackedStringArray:
+	var lines := PackedStringArray()
+	var line := ""
+	for ch in text:
+		if skin.text_width(line + ch, size, true) > width:
+			lines.append(line)
+			line = ""
+		line += ch
+	if line != "":
+		lines.append(line)
+	return lines
+
+
+## 幅に収まるように折り返して描く。次の行の y を返す
+func _draw_wrapped(skin: UiSkin, text: String, pos: Vector2, width: float, size: int) -> float:
+	var y := pos.y
+	for line in _wrap(skin, text, width, size):
+		skin.draw_text(self, Vector2(pos.x, y), line, size, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+		y += size * 1.6
+	return y
 
 
 func _record_text(item: String) -> String:
