@@ -1,84 +1,242 @@
 extends Node2D
-## タイトル・モード選択
+## タイトル。左に大分類のメニュー（カーソルを合わせた大分類の中身が開く）、
+## 右に選んでいるものの説明・記録と、CPU（Lv.4）が積み続ける小さなデモ盤面。
 
-const SETTINGS := -1
-const VERSUS := -2
-const DEMO := -3
-const ITEMS := [App.Mode.SPRINT_40L, App.Mode.MARATHON, VERSUS, DEMO, SETTINGS]
-const ITEM_SIZE := Vector2(380, 54)
-const ITEM_TOP := 240
-const ITEM_GAP := 64
+const CATEGORIES := [
+	{"key": "cat_solo", "items": ["40l", "marathon", "ultra", "dig"]},
+	{"key": "cat_practice", "items": ["practice"]},
+	{"key": "cat_versus", "items": ["versus", "demo"]},
+	{"key": "menu_settings", "items": []},  # 中身なし: 決定でそのまま設定画面へ
+]
+const ITEM_LABELS := {
+	"40l": "mode_40l", "marathon": "mode_marathon", "ultra": "mode_ultra", "dig": "mode_dig",
+	"practice": "mode_practice", "versus": "mode_versus", "demo": "mode_demo",
+}
+const ITEM_MODES := {
+	"40l": App.Mode.SPRINT_40L, "marathon": App.Mode.MARATHON, "ultra": App.Mode.ULTRA,
+	"dig": App.Mode.DIG, "practice": App.Mode.PRACTICE,
+}
+const MENU_X := 90.0
+const MENU_W := 400.0
+const MENU_TOP := 196.0
+const CAT_H := 58.0
+const ITEM_H := 46.0
+const PANEL := Rect2(560, 150, 660, 480)
+const DEMO_CELL := 16.0
+const DEMO_POS := Vector2(1020, 280)
+const DEMO_LEVEL := 4
 
-var _index := 0
+var _cat := 0                   # カーソルのある大分類
+var _item := -1                 # 大分類の中の項目（-1 は大分類そのもの）
 var _time := 0.0
+var _demo_view := FieldView.new()
+var _demo_game: GameState
+var _demo_cpu: CpuPlayer
 
 
 func _ready() -> void:
-	_index = maxi(ITEMS.find(App.mode), 0)
+	# ゲームから戻ってきたら、遊んでいたモードにカーソルを合わせる
+	for i in CATEGORIES.size():
+		if CATEGORIES[i].key == App.menu_category:
+			_cat = i
+			var items: Array = CATEGORIES[i].items
+			for j in items.size():
+				if (items[j] == "demo" and App.demo) or (ITEM_MODES.get(items[j], -1) == App.mode and not App.demo):
+					_item = j
+	App.demo = false
+
+	_demo_view.cell = DEMO_CELL
+	_demo_view.show_side = false
+	_demo_view.muted = true
+	add_child(_demo_view)
+	_demo_view.set_base_position(DEMO_POS)
+	_restart_demo()
+
+
+func _exit_tree() -> void:
+	if _demo_cpu != null:
+		_demo_cpu.shutdown()
+
+
+func _restart_demo() -> void:
+	if _demo_cpu != null:
+		_demo_cpu.shutdown()
+	_demo_game = GameState.new()
+	_demo_game.fixed_level = 1
+	_demo_view.setup(_demo_game, false)
+	_demo_cpu = CpuPlayer.new(_demo_game, DEMO_LEVEL)
+	_demo_game.start()
+
+
+func _physics_process(_delta: float) -> void:
+	_demo_cpu.tick()
+	_demo_game.tick()
+	if _demo_game.is_finished():
+		_restart_demo()
 
 
 func _process(delta: float) -> void:
 	_time += delta
 	queue_redraw()
-	var dir := InputSetup.menu_direction(delta)
-	if dir == "down":
-		_index = (_index + 1) % ITEMS.size()
-		Sfx.play("menu_move")
-	elif dir == "up":
-		_index = (_index - 1 + ITEMS.size()) % ITEMS.size()
-		Sfx.play("menu_move")
-	elif Input.is_action_just_pressed("accept"):
-		Sfx.play("menu_select")
-		if ITEMS[_index] == SETTINGS:
-			get_tree().change_scene_to_file("res://scenes/settings.tscn")
-			return
-		if ITEMS[_index] == VERSUS:
-			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
-			return
-		if ITEMS[_index] == DEMO:
-			App.demo = true
-			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
-			return
-		App.mode = ITEMS[_index]
-		get_tree().change_scene_to_file("res://scenes/game.tscn")
+	match InputSetup.menu_direction(delta):
+		"down":
+			_move(1)
+		"up":
+			_move(-1)
+		"right":
+			if _item < 0:
+				_select()
+		"left":
+			if _item >= 0:
+				_back()
+	if Input.is_action_just_pressed("accept"):
+		_select()
+	elif Input.is_action_just_pressed("back") and _item >= 0:
+		_back()
 
+
+## 上下の移動。大分類を選んでいるときは大分類の間だけ、項目を選んでいるときはその大分類の中だけ
+func _move(step: int) -> void:
+	if _item < 0:
+		_cat = (_cat + step + CATEGORIES.size()) % CATEGORIES.size()
+		App.menu_category = CATEGORIES[_cat].key
+	else:
+		var count: int = CATEGORIES[_cat].items.size()
+		_item = (_item + step + count) % count
+	Sfx.play("menu_move")
+
+
+func _select() -> void:
+	var items: Array = CATEGORIES[_cat].items
+	Sfx.play("menu_select")
+	if _item < 0:
+		if items.is_empty():
+			get_tree().change_scene_to_file("res://scenes/settings.tscn")
+		else:
+			_item = 0
+			App.menu_category = CATEGORIES[_cat].key
+		return
+	var item: String = items[_item]
+	App.menu_category = CATEGORIES[_cat].key
+	match item:
+		"versus", "demo":
+			App.demo = item == "demo"
+			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
+		_:
+			App.mode = ITEM_MODES[item]
+			get_tree().change_scene_to_file("res://scenes/game.tscn")
+
+
+func _back() -> void:
+	Sfx.play("menu_back")
+	_item = -1
+
+
+# ---------------- 描画 ----------------
 
 func _draw() -> void:
 	var skin: UiSkin = App.skin
-	var w := 1280.0
 	skin.draw_background(self, Vector2(1280, 720), _time)
-	skin.draw_logo(self, Vector2(640, 150), _time)
+	skin.draw_logo(self, Vector2(MENU_X + MENU_W / 2, 100), _time)
+	_draw_menu(skin)
+	_draw_preview(skin)
 
-	for i in ITEMS.size():
-		var selected := i == _index
-		var rect := Rect2(Vector2(640 - ITEM_SIZE.x / 2, ITEM_TOP + i * ITEM_GAP), ITEM_SIZE)
-		if not selected:
-			skin.draw_panel(self, rect)
-		skin.draw_item(self, rect, selected, _time)
-		var key: String = {SETTINGS: "menu_settings", VERSUS: "mode_versus", DEMO: "mode_demo"}.get(ITEMS[i], App.MODE_KEYS.get(ITEMS[i], ""))
-		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 39), Loc.t(key), 28,
-			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
-
-	var record := ""
-	if ITEMS[_index] == App.Mode.SPRINT_40L:
-		var best := "--:--.---" if App.best_40l_ticks == 0 else App.format_time(App.best_40l_ticks)
-		record = "%s  %s" % [Loc.t("best"), best]
-	elif ITEMS[_index] == App.Mode.MARATHON:
-		record = "%s  %d" % [Loc.t("high_score"), App.marathon_best_score]
-	elif ITEMS[_index] == VERSUS:
-		var r: Array = App.versus_record(App.versus_level)
-		record = "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [r[0], r[1]]]
-	elif ITEMS[_index] == DEMO:
-		record = Loc.t("demo_desc") % [App.demo_levels[0], App.demo_levels[1]]
-	if record != "":
-		var rw: float = skin.text_width(record, 24, true) + 60
-		var rect := Rect2(640 - rw / 2, 566, rw, 48)
-		skin.draw_panel(self, rect)
-		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 34), record, 24, "highlight", HORIZONTAL_ALIGNMENT_CENTER, rw, true)
-
-	skin.draw_text(self, Vector2(0, 660), Loc.t("hint_title") % InputSetup.action_hint("accept"), 18, "text", HORIZONTAL_ALIGNMENT_CENTER, w)
+	var hint := Loc.t("hint_title") % InputSetup.action_hint("accept")
+	if _item >= 0:
+		hint += "　%s: %s" % [InputSetup.action_hint("back"), Loc.t("set_back")]
+	skin.draw_text(self, Vector2(0, 676), hint, 18, "text", HORIZONTAL_ALIGNMENT_CENTER, 1280)
 	var pads := []
 	for device in Input.get_connected_joypads():
 		pads.append("#%d %s" % [device, Input.get_joy_name(device)])
 	var pad_text := "%s: %s" % [Loc.t("controller"), ", ".join(pads) if pads.size() > 0 else Loc.t("not_found")]
-	skin.draw_text(self, Vector2(0, 700), pad_text, 14, "text_dim", HORIZONTAL_ALIGNMENT_CENTER, w)
+	skin.draw_text(self, Vector2(0, 704), pad_text, 14, "text_dim", HORIZONTAL_ALIGNMENT_CENTER, 1280)
+
+
+## 左のメニュー。大分類は決定するまで閉じたまま、開いている大分類だけ中身を見せる
+func _draw_menu(skin: UiSkin) -> void:
+	var y := MENU_TOP
+	for i in CATEGORIES.size():
+		var c: Dictionary = CATEGORIES[i]
+		var rect := Rect2(MENU_X, y, MENU_W, CAT_H - 8)
+		var selected := i == _cat and _item < 0
+		var open := i == _cat and _item >= 0
+		if not selected:
+			skin.draw_panel(self, rect)
+		skin.draw_item(self, rect, selected, _time)
+		var mark := ""
+		if i == _cat and not c.items.is_empty():
+			mark = "▼ " if open else "▶ "
+		skin.draw_text(self, Vector2(rect.position.x + 24, rect.position.y + 36), mark + Loc.t(c.key), 26,
+			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+		y += CAT_H
+		if not open:
+			continue
+		for j in c.items.size():
+			var item_rect := Rect2(MENU_X + 36, y, MENU_W - 36, ITEM_H - 6)
+			var item_selected: bool = j == _item
+			skin.draw_item(self, item_rect, item_selected, _time)
+			# 大分類を選んでいる間は、中身はまだ選べないので薄く見せる
+			var role := "text_on_accent" if item_selected else ("text_dim" if _item < 0 else "text")
+			skin.draw_text(self, Vector2(item_rect.position.x + 22, item_rect.position.y + 29), Loc.t(ITEM_LABELS[c.items[j]]), 22,
+				role, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+			y += ITEM_H
+		y += 6
+
+
+## 右のパネル: 名前・説明・記録と、デモ盤面の見出し
+func _draw_preview(skin: UiSkin) -> void:
+	skin.draw_panel(self, PANEL)
+	var c: Dictionary = CATEGORIES[_cat]
+	var item: String = c.items[_item] if _item >= 0 else ""
+	var title := Loc.t(ITEM_LABELS[item]) if item != "" else Loc.t(c.key)
+	var desc := Loc.t("desc_" + item) if item != "" else Loc.t("desc_" + c.key)
+	var left := PANEL.position.x + 36
+	var text_w := DEMO_POS.x - left - 30
+	skin.draw_text(self, Vector2(left, PANEL.position.y + 70), title, 40, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	draw_line(Vector2(left, PANEL.position.y + 92), Vector2(left + text_w, PANEL.position.y + 92), skin.colors.text_dim, 2.0)
+	_draw_wrapped(skin, desc, Vector2(left, PANEL.position.y + 136), text_w, 20)
+	# 大分類を選んでいる間は、その中身を一覧で見せる
+	if item == "":
+		for j in c.items.size():
+			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + Loc.t(ITEM_LABELS[c.items[j]]), 24,
+				"text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	var record := _record_text(item)
+	if record != "":
+		skin.draw_text(self, Vector2(left, PANEL.end.y - 40), record, 24, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	# デモ盤面の見出し
+	# 出現したミノは盤面の上に 2 段はみ出すので、そのさらに上に置く
+	skin.draw_text(self, Vector2(DEMO_POS.x, DEMO_POS.y - FieldView.SHOW_HIDDEN_ROWS * DEMO_CELL - 10), "DEMO  CPU Lv.%d" % DEMO_LEVEL, 15, "text_dim",
+		HORIZONTAL_ALIGNMENT_CENTER, Board.WIDTH * DEMO_CELL, true)
+
+
+## 幅に収まるように折り返して描く
+func _draw_wrapped(skin: UiSkin, text: String, pos: Vector2, width: float, size: int) -> void:
+	var line := ""
+	var y := pos.y
+	for ch in text:
+		if skin.text_width(line + ch, size, true) > width:
+			skin.draw_text(self, Vector2(pos.x, y), line, size, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+			line = ""
+			y += size * 1.6
+		line += ch
+	if line != "":
+		skin.draw_text(self, Vector2(pos.x, y), line, size, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+
+
+func _record_text(item: String) -> String:
+	match item:
+		"40l":
+			var best := "--:--.---" if App.best_40l_ticks == 0 else App.format_time(App.best_40l_ticks)
+			return "%s  %s" % [Loc.t("best"), best]
+		"marathon":
+			return "%s  %d" % [Loc.t("high_score"), App.marathon_best_score]
+		"ultra":
+			return "%s  %d" % [Loc.t("high_score"), App.ultra_best_score]
+		"dig":
+			return "%s  %d" % [Loc.t("best"), App.dig_best]
+		"versus":
+			var r: Array = App.versus_record(App.versus_level)
+			return "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [r[0], r[1]]]
+		"demo":
+			return Loc.t("demo_desc") % [App.demo_levels[0], App.demo_levels[1]]
+	return ""

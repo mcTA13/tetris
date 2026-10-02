@@ -1,14 +1,17 @@
 extends Node
 ## 選択中のモード、自己ベスト、設定の保存、今の見た目（スキン）。
 
-enum Mode { SPRINT_40L, MARATHON }
+enum Mode { SPRINT_40L, MARATHON, ULTRA, DIG, PRACTICE }
 
 const SAVE_PATH := "user://save.json"
-const MODE_KEYS := {Mode.SPRINT_40L: "mode_40l", Mode.MARATHON: "mode_marathon"}  # Loc のキー
+const MODE_KEYS := {  # Loc のキー
+	Mode.SPRINT_40L: "mode_40l", Mode.MARATHON: "mode_marathon", Mode.ULTRA: "mode_ultra",
+	Mode.DIG: "mode_dig", Mode.PRACTICE: "mode_practice",
+}
 const ASSIST_MODES := ["off", "free", "six_three"]
 const SOFT_DROP_INSTANT := 0    # soft_drop がこの値なら即座に一番下まで
 # 見た目の一覧。テイストを増やすときはここに追加する
-const SKINS := {"pop": preload("res://scripts/skin/pop_skin.gd")}
+const SKINS := {"pop": preload("res://scripts/skin/pop_skin.gd"), "classic": preload("res://scripts/skin/classic_skin.gd")}
 
 const DEFAULT_SETTINGS := {
 	"das": 10,
@@ -29,6 +32,9 @@ const DEFAULT_SETTINGS := {
 var mode := Mode.SPRINT_40L
 var best_40l_ticks := 0         # 0 は記録なし
 var marathon_best_score := 0
+var ultra_best_score := 0
+var dig_best := 0               # 掘りモードで掘った最多段数
+var menu_category := ""         # タイトルで開いていた大分類（保存しない）
 # CPU 対戦
 var versus_level := 3           # 1〜5、6 は隠しの TAS
 var versus_first_to := 2
@@ -78,6 +84,22 @@ func versus_record(level: int) -> Array:
 	return versus_records.get(level, [0, 0]).duplicate()
 
 
+func submit_ultra(score: int) -> bool:
+	if score <= ultra_best_score:
+		return false
+	ultra_best_score = score
+	save()
+	return true
+
+
+func submit_dig(dug: int) -> bool:
+	if dug <= dig_best:
+		return false
+	dig_best = dug
+	save()
+	return true
+
+
 func submit_marathon(score: int) -> bool:
 	if score <= marathon_best_score:
 		return false
@@ -101,6 +123,8 @@ func save() -> void:
 	f.store_string(JSON.stringify({
 		"best_40l_ticks": best_40l_ticks,
 		"marathon_best_score": marathon_best_score,
+		"ultra_best_score": ultra_best_score,
+		"dig_best": dig_best,
 		"versus_level": versus_level,
 		"versus_first_to": versus_first_to,
 		"versus_records": versus_records,
@@ -118,6 +142,8 @@ func _load() -> void:
 		return
 	best_40l_ticks = int(data.get("best_40l_ticks", 0))
 	marathon_best_score = int(data.get("marathon_best_score", 0))
+	ultra_best_score = int(data.get("ultra_best_score", 0))
+	dig_best = int(data.get("dig_best", 0))
 	versus_level = clampi(int(data.get("versus_level", 3)), 1, 5)  # 隠しの TAS は毎回コマンドで出す
 	versus_first_to = clampi(int(data.get("versus_first_to", 2)), 1, 3)
 	var saved_demo = data.get("demo_levels", [4, 4])

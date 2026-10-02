@@ -5,6 +5,10 @@ extends Node
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var out_dir: String = args[0] if args.size() > 0 else "user://"
+	# 2 つ目の引数でテーマを指定できる（保存はしない）
+	if args.size() > 1:
+		App.settings.skin = args[1]
+		App.apply_look()
 	var had_save := FileAccess.file_exists(App.SAVE_PATH)
 	var saved_text := FileAccess.get_file_as_string(App.SAVE_PATH) if had_save else ""
 

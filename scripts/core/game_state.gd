@@ -35,6 +35,7 @@ var line_clear_frames := 18
 var soft_drop_factor := 20.0
 var fixed_level := 0            # 0 以外なら落下速度をこのレベルで固定（40ライン用）
 var line_goal := 0              # 0 以外ならこのライン数でクリア
+var allow_hold := true          # false ならホールドできない（Tスピン練習）
 
 var board := Board.new()
 var bag: Bag
@@ -85,6 +86,19 @@ func _init(seed_value: int = 0) -> void:
 
 func start() -> void:
 	_spawn(bag.pop())
+
+
+## 最初のミノを決めて始める（Tスピン練習）
+func start_with(type: int) -> void:
+	_spawn(type)
+
+
+## 時間切れなどで終わらせる（ウルトラ）
+func finish() -> void:
+	if is_finished():
+		return
+	phase = Phase.CLEARED
+	event.emit("finished", {"ticks": ticks})
 
 
 func next_queue() -> Array[int]:
@@ -205,7 +219,7 @@ func rotate(dir: int) -> bool:
 
 
 func hold() -> bool:
-	if not can_control() or hold_used:
+	if not can_control() or hold_used or not allow_hold:
 		return false
 	var current := piece
 	hold_used = true

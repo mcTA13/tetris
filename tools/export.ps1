@@ -20,6 +20,7 @@ Copy-Item (Join-Path $root "lib\cold-clear-2.exe") (Join-Path $build "lib")
 Copy-Item (Join-Path $root "lib\cold-clear-2-six-three.json") (Join-Path $build "lib")
 Copy-Item (Join-Path $root "lib\COLD-CLEAR-2-LICENSE-*") (Join-Path $build "licenses")
 Copy-Item (Join-Path $root "assets\fonts\OFL.txt") (Join-Path $build "licenses\M-PLUS-ROUNDED-1C-OFL.txt")
+Copy-Item (Join-Path $root "assets\fonts\OFL-MPLUS1p.txt") (Join-Path $build "licenses\M-PLUS-1P-OFL.txt")
 
 $zip = Join-Path $dist "Tetris-windows-x86_64.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }

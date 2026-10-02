@@ -33,6 +33,9 @@ func _init() -> void:
 	test_b2b_tspin_then_tetris_with_input()
 	test_b2b_tsd_locked_by_delay()
 	test_b2b_tsd_while_soft_dropping()
+	test_drills_are_solvable()
+	test_hold_can_be_disabled()
+	test_finish_ends_game()
 	test_cold_clear_suggests_tspin_double()
 	print("\n%d checks, %d failed" % [_count, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -607,3 +610,43 @@ func test_b2b_tsd_while_soft_dropping() -> void:
 		g.tick()
 	var c1 := find_event(ev, "clear")
 	check(c1.get("spin") == GameState.Spin.FULL and c1.get("lines") == 2, "B2B(ソフトドロップ中): TSD になる (%s)" % str(c1))
+
+
+# ---------------- 練習・モード ----------------
+
+func test_drills_are_solvable() -> void:
+	for d in TSpinDrills.all():
+		var g := GameState.new(1)
+		TSpinDrills.apply(d, g.board)
+		g.start_with(PieceData.T)
+		var sol := TSpinDrills.solution(d, g.board, Vector3i(g.pos.x, g.pos.y, g.rot))
+		check(not sol.is_empty(), "練習: %s %s に正解がある" % [d.name, d.rows[0]])
+		if sol.is_empty():
+			continue
+		# 正解の手順を実際に入力すると、その Tスピンになる
+		var ev := capture(g)
+		for a in sol.path:
+			match a:
+				CpuBrain.Act.LEFT: g.move(-1)
+				CpuBrain.Act.RIGHT: g.move(1)
+				CpuBrain.Act.CW: g.rotate(1)
+				CpuBrain.Act.CCW: g.rotate(-1)
+				CpuBrain.Act.DROP: g.sonic_drop()
+		g.hard_drop()
+		var c := find_event(ev, "clear")
+		check(c.get("spin") == GameState.Spin.FULL and c.get("lines") == d.lines, "練習: %s を実際に決められる (%s)" % [d.name, str(c)])
+
+
+func test_hold_can_be_disabled() -> void:
+	var g := GameState.new(3)
+	g.allow_hold = false
+	g.start()
+	check(not g.hold(), "ホールドを禁止できる")
+
+
+func test_finish_ends_game() -> void:
+	var g := GameState.new(3)
+	g.start()
+	var ev := capture(g)
+	g.finish()
+	check(g.phase == GameState.Phase.CLEARED and not find_event(ev, "finished").is_empty(), "時間切れで終わらせられる")

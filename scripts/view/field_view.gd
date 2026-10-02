@@ -24,6 +24,8 @@ var next_rect := Rect2()
 var counter_pos := Vector2.ZERO
 var message_rect := Rect2()     # 直前の消し方の表示（中央揃え）。size.x が 0 なら出さない
 var show_meter := false
+var show_side := true           # false ならホールド・NEXT・カウンター・技名を出さない（タイトルのデモ）
+var muted := false              # true なら音を出さない
 
 var fx := Effects.new()
 var _guide := {}                # アシストのおすすめ {"type", "pos", "rot", "hold"}
@@ -174,12 +176,14 @@ func _on_clear(data: Dictionary) -> void:
 
 ## 操作音（自分のときだけ）
 func _player_sound(sound: String, pitch := 1.0) -> void:
-	if is_player:
+	if is_player and not muted:
 		Sfx.play(sound, pitch)
 
 
 ## 消去などの音（CPU は小さめ）
 func _sound(sound: String, pitch := 1.0) -> void:
+	if muted:
+		return
 	Sfx.play(sound, pitch, 1.0 if is_player else CPU_VOLUME)
 
 
@@ -262,6 +266,11 @@ func _draw() -> void:
 
 	if show_meter:
 		skin.draw_garbage_meter(self, meter_rect(), game.incoming_total(), cell, _time)
+
+	if not show_side:
+		fx.draw_particles(self, skin)
+		fx.draw_popups(self, skin, rect.get_center() + Vector2(0, -2 * cell), cell / 30.0)
+		return
 
 	# ホールド
 	var preview := cell * 0.8
