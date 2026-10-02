@@ -4,7 +4,7 @@
 
 - SRS（壁蹴り）、7種1巡、ホールド、NEXT 5
 - Tスピン（Mini / TST 蹴り含む）と全ミノスピン、B2B、REN、全消し
-- モード: 40ライン、マラソン、CPU 対戦（Lv.1〜5 ＋ 隠しの TAS）
+- モード: 40ライン、マラソン、ウルトラ、掘り、Tスピン練習、CPU 対戦（Lv.1〜5 ＋ 隠しの TAS）、デモ
 - 設定: DAS / ARR / ソフトドロップ速度などの調整、ボタン割り当て、日本語 / 英語
 - 見た目・演出・効果音は「スキン」単位で差し替え可能（POP / CLASSIC）
 
@@ -78,3 +78,4 @@ copy target\release\cold-clear-2.exe <このプロジェクト>\lib\
 - 同梱フォント M PLUS Rounded 1c は SIL Open Font License 1.1（`assets/fonts/OFL.txt`）
 - 同梱フォント M PLUS 1p（CLASSIC テーマ）は SIL Open Font License 1.1（`assets/fonts/OFL-MPLUS1p.txt`）
 - 同梱の Cold Clear 2 は MIT / Apache-2.0（`lib/COLD-CLEAR-2-LICENSE-*`）
+- BGM: KOROBUSHKA (Ryu☆Remix)（`assets/bgm/korobushka.ogg`。3:05.32 で切って Ogg Vorbis に変換したもの）
