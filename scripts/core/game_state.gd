@@ -88,9 +88,15 @@ func start() -> void:
 	_spawn(bag.pop())
 
 
-## 最初のミノを決めて始める（Tスピン練習）
+## 最初のミノを決めて始める（スピン練習）
 func start_with(type: int) -> void:
 	_spawn(type)
+
+
+## 最初の何個かのミノの順番を決めて始める（パフェ練習・開幕テンプレ練習）。その後はふつうの 7 種 1 巡
+func start_with_queue(pieces: Array) -> void:
+	bag.push_front(pieces)
+	start()
 
 
 ## 時間切れなどで終わらせる（ウルトラ）

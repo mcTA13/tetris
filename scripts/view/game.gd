@@ -1,6 +1,6 @@
 extends Node2D
-## 1人用のゲーム画面（40ライン / マラソン / ウルトラ / 掘り / Tスピン練習）。盤面の描画と演出は FieldView、
-## ここでは入力・進行・情報パネル・バナー・ポーズを受け持つ。
+## 1人用のゲーム画面（40ライン / マラソン / ウルトラ / 掘り / 練習）。盤面の描画と演出は FieldView、
+## ここでは入力・進行・情報パネル・バナー・ポーズを受け持つ。練習ごとの決まりは Practice（scripts/practice/）。
 ## 40ラインでアシストがオンなら、Cold Clear 2 のおすすめの置き場所をガイドとして出す。
 
 const CELL := 30.0
@@ -42,12 +42,8 @@ var _assist_pending := false    # Cold Clear 2 の準備ができたら聞く
 var _dug := 0
 var _dig_timer := 0
 var _dig_rises := 0
-# Tスピン練習
-var _drills := TSpinDrills.all()
-var _drill_index := 0
-var _attempts := 0
-var _successes := 0
-var _show_hint := false
+# 練習
+var _practice: Practice
 var _practice_result := ""      # "success" / "fail" / ""（判定待ち）
 var _practice_timer := 0
 
@@ -61,11 +57,24 @@ func _ready() -> void:
 	add_child(_field)
 	add_child(_overlay)
 	_overlay.draw.connect(_draw_overlay)
+	if App.mode == App.Mode.PRACTICE:
+		_practice = _make_practice(App.practice)
 	if App.mode == App.Mode.SPRINT_40L and App.settings.assist != "off" and ColdClearBot.available():
 		_assist = ColdClearBot.new()
 		if not _assist.launch(SIX_THREE_CONFIG if App.settings.assist == "six_three" else ""):
 			_assist = null
 	_new_game()
+
+
+static func _make_practice(kind: String) -> Practice:
+	match kind:
+		"pc":
+			return PcPractice.new()
+		"ren":
+			return RenPractice.new()
+	if kind.begins_with("op_"):
+		return OpenerPractice.new(kind)
+	return SpinPractice.new(kind)
 
 
 func _exit_tree() -> void:
@@ -85,8 +94,8 @@ func _new_game(countdown := true) -> void:
 			_fill_dig_garbage()
 		App.Mode.PRACTICE:
 			game.fixed_level = 1
-			game.allow_hold = false
-			TSpinDrills.apply(_drills[_drill_index], game.board)
+			game.allow_hold = _practice.allow_hold()
+			_practice.setup(game)
 	# マラソン・ウルトラはレベルが上がっていく（ウルトラは 2 分で終わり）
 	game.event.connect(_on_game_event)
 	_field.setup(game, true)
@@ -121,12 +130,9 @@ func _new_game(countdown := true) -> void:
 
 func _start_game() -> void:
 	Bgm.play()
-	if App.mode == App.Mode.PRACTICE:
-		game.start_with(PieceData.T)
-		if _show_hint:
-			var sol := TSpinDrills.solution(_drills[_drill_index], game.board, Vector3i(game.pos.x, game.pos.y, game.rot))
-			if not sol.is_empty():
-				_field.set_guide(PieceData.T, Vector2i(sol.x, sol.y), sol.rot, false)
+	if _practice != null:
+		_practice.start(game)
+		_show_practice_guide()
 	else:
 		game.start()
 
@@ -181,6 +187,8 @@ func _physics_process(delta: float) -> void:
 		_update_practice()
 		return
 	game.tick()
+	if _practice != null:
+		_practice.update(game)
 	_update_mode_rules()
 	if game.level > _last_level:
 		_last_level = game.level
@@ -209,12 +217,15 @@ func _update_practice() -> void:
 	_practice_timer -= 1
 	if _practice_timer > 0:
 		return
-	if _practice_result == "success":
-		_drill_index = (_drill_index + 1) % _drills.size()
-		_show_hint = false
-	else:
-		_show_hint = true  # 失敗したら正解の置き場所をガイドで見せる
+	_practice.advance(_practice_result == "success")  # 失敗したら、同じ課題をお手本付きで
 	_new_game(false)
+
+
+## 練習のお手本の置き場所を出す
+func _show_practice_guide() -> void:
+	var g := _practice.guide(game)
+	if not g.is_empty():
+		_field.set_guide(g.type, Vector2i(g.x, g.y), g.rot, g.hold)
 
 
 ## ポーズ中: 上下で選んで決定。ポーズ / 戻るボタンでそのまま再開
@@ -281,29 +292,26 @@ func _process(delta: float) -> void:
 
 
 func _on_game_event(kind: String, data: Dictionary) -> void:
+	if _practice != null and _practice_result == "":
+		_practice_result = _practice.judge(kind, data, game)
+		if _practice_result != "":
+			_practice_timer = PRACTICE_RESULT_TICKS
 	match kind:
 		"spawn":
 			if _assist != null:
 				_request_assist()
+			if _practice != null:
+				_show_practice_guide()
 		"lock":
 			_field.clear_guide()
 			_assist_wait = -1
 			_assist_asked = false
-			if App.mode == App.Mode.PRACTICE and _practice_result == "":
-				# 成功なら直後の clear イベントで "success" に変わる
-				_attempts += 1
-				_practice_result = "fail"
-				_practice_timer = PRACTICE_RESULT_TICKS
 		"clear":
 			if App.mode == App.Mode.DIG:
 				# 消えた行のうち、おじゃまを含む行を掘った段数として数える
 				for y in game.board.full_rows():
 					if game.board.grid[y].has(PieceData.GARBAGE):
 						_dug += 1
-			if App.mode == App.Mode.PRACTICE and data.piece == PieceData.T \
-					and data.spin == GameState.Spin.FULL and data.lines == _drills[_drill_index].lines:
-				_practice_result = "success"
-				_successes += 1
 		"finished":
 			Sfx.play("finish")
 			match App.mode:
@@ -370,9 +378,7 @@ func _stats() -> Array:
 			return [[Loc.t("dug"), str(_dug)], [Loc.t("time"), App.format_time(game.ticks)],
 				[Loc.t("next_rise"), "%.1f s" % (_dig_timer / 60.0)]]
 		App.Mode.PRACTICE:
-			var d: Dictionary = _drills[_drill_index]
-			var side := Loc.t("practice_left") if d.side == "left" else Loc.t("practice_right")
-			return [[Loc.t("practice_drill"), "%s %s" % [d.name, side]], [Loc.t("practice_success"), "%d / %d" % [_successes, _attempts]]]
+			return _practice.stats()
 	return [[Loc.t("score"), str(game.score)], [Loc.t("level"), str(game.level)],
 		[Loc.t("lines"), str(game.lines)], [Loc.t("time"), App.format_time(game.ticks)]]
 
@@ -401,6 +407,8 @@ func _draw_result(center: Vector2) -> void:
 				lines.append(Loc.t("new_record") if _new_record else "%s %s" % [Loc.t("best"), App.format_time(App.best_40l_ticks)])
 		else:
 			lines = [Loc.t("game_over"), "%s %d / 40" % [Loc.t("lines"), game.lines]]
+	elif App.mode == App.Mode.PRACTICE:
+		lines = [Loc.t("game_over")] + _practice.result_lines()
 	elif App.mode == App.Mode.DIG:
 		lines = [Loc.t("game_over"), "%s %d" % [Loc.t("dug"), _dug], App.format_time(game.ticks)]
 		lines.append(Loc.t("new_record") if _new_record else "%s %d" % [Loc.t("best"), App.dig_best])

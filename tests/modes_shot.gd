@@ -48,7 +48,7 @@ func _ready() -> void:
 			scene.game.hard_drop()
 			for _i in 40:
 				scene._physics_process(1.0 / 60.0)
-			print("practice after miss: attempts=%d hint=%s guide=%s" % [scene._attempts, scene._show_hint, str(scene._field._guide)])
+			print("practice after miss: attempts=%d hint=%s guide=%s" % [scene._practice.attempts, scene._practice.show_hint, str(scene._field._guide)])
 		if m == App.Mode.ULTRA:
 			# 2 分たったら TIME UP で終わるか
 			scene.game.ticks = scene.ULTRA_TICKS - 1

@@ -36,6 +36,8 @@ func _init() -> void:
 	test_b2b_tsd_locked_by_delay()
 	test_b2b_tsd_while_soft_dropping()
 	test_drills_are_solvable()
+	test_pc_drill_is_solvable()
+	test_openers_can_be_built()
 	test_hold_can_be_disabled()
 	test_finish_ends_game()
 	test_cold_clear_suggests_tspin_double()
@@ -643,15 +645,29 @@ func test_b2b_tsd_while_soft_dropping() -> void:
 # ---------------- 練習・モード ----------------
 
 func test_drills_are_solvable() -> void:
-	for d in TSpinDrills.all():
+	for d in SpinDrills.all():
 		var g := GameState.new(1)
-		TSpinDrills.apply(d, g.board)
-		g.start_with(PieceData.T)
-		var sol := TSpinDrills.solution(d, g.board, Vector3i(g.pos.x, g.pos.y, g.rot))
+		SpinDrills.apply(d, g.board)
+		g.start_with(d.piece)
+		var start := Vector3i(g.pos.x, g.pos.y, g.rot)
+		var sol := SpinDrills.solution(d, g.board, start)
 		check(not sol.is_empty(), "練習: %s %s に正解がある" % [d.name, d.rows[0]])
 		if sol.is_empty():
 			continue
-		# 正解の手順を実際に入力すると、その Tスピンになる
+		var rows := CpuBrain.rows_from(g.board)
+		var sol_cells := SpinDrills.cells_at(d.piece, sol.rot, Vector2i(sol.x, sol.y))
+		# 正解だけがその段数を消せて、回さずに落とすだけでは入らない
+		var others := 0
+		for p in CpuBrain.find_placements(rows, d.piece, start):
+			if CpuBrain.place(rows, d.piece, p.rot, p.x, p.y)[1] >= d.lines \
+					and SpinDrills.cells_at(d.piece, p.rot, Vector2i(p.x, p.y)) != sol_cells:
+				others += 1
+		check(others == 0, "練習: %s %s の正解はひとつだけ" % [d.name, d.rows[0]])
+		var by_drop := false
+		for p in CpuBrain.find_placements(rows, d.piece, start, true):
+			by_drop = by_drop or SpinDrills.cells_at(d.piece, p.rot, Vector2i(p.x, p.y)) == sol_cells
+		check(not by_drop, "練習: %s %s は回さないと入らない" % [d.name, d.rows[0]])
+		# 正解の手順を実際に入力すると、その段数を消せる
 		var ev := capture(g)
 		for a in sol.path:
 			match a:
@@ -662,7 +678,79 @@ func test_drills_are_solvable() -> void:
 				CpuBrain.Act.DROP: g.sonic_drop()
 		g.hard_drop()
 		var c := find_event(ev, "clear")
-		check(c.get("spin") == GameState.Spin.FULL and c.get("lines") == d.lines, "練習: %s を実際に決められる (%s)" % [d.name, str(c)])
+		var ok: bool = c.get("lines") == d.lines
+		if d.piece == PieceData.T:
+			ok = ok and c.get("spin") == GameState.Spin.FULL
+		check(ok, "練習: %s を実際に決められる (%s)" % [d.name, str(c)])
+
+
+func test_openers_can_be_built() -> void:
+	var rng := RandomNumberGenerator.new()
+	for id in OpenerDrills.OPENERS:
+		for trial in 2:
+			rng.seed = 7 + trial
+			var d := OpenerDrills.build(id, rng)
+			check(not d.is_empty(), "開幕テンプレ %s: 組める順番がある" % id)
+			if d.is_empty():
+				continue
+			# 実際に手順どおり入力して、Tスピンがその段数で決まる
+			var g := GameState.new(1)
+			g.start_with_queue(d.queue)
+			var ev := capture(g)
+			var ok := true
+			for step in d.steps:
+				ok = ok and g.piece == step.type
+				var path = null
+				for p in CpuBrain.find_placements(CpuBrain.rows_from(g.board), g.piece, Vector3i(g.pos.x, g.pos.y, g.rot)):
+					if SpinDrills.cells_at(g.piece, p.rot, Vector2i(p.x, p.y)) == step.cells:
+						path = p.path
+				ok = ok and path != null
+				if path == null:
+					break
+				ev.clear()
+				for a in path:
+					match a:
+						CpuBrain.Act.LEFT: g.move(-1)
+						CpuBrain.Act.RIGHT: g.move(1)
+						CpuBrain.Act.CW: g.rotate(1)
+						CpuBrain.Act.CCW: g.rotate(-1)
+						CpuBrain.Act.DROP: g.sonic_drop()
+				g.hard_drop()
+				if step.tspin > 0:
+					var c := find_event(ev, "clear")
+					ok = ok and c.get("spin") == GameState.Spin.FULL and c.get("lines") == step.tspin
+				for _t in 40:
+					g.tick()
+			check(ok, "開幕テンプレ %s: 手順どおりに置けて Tスピンが決まる" % id)
+			if id == "op_pco":
+				check(g.board.is_empty(), "開幕テンプレ %s: 全消しになる" % id)
+
+
+func test_pc_drill_is_solvable() -> void:
+	var rng := RandomNumberGenerator.new()
+	for i in 5:
+		rng.seed = 100 + i
+		var d := PcDrills.generate(rng, 5)
+		var g := GameState.new(1)
+		var src: Board = d.board
+		for y in Board.HEIGHT:
+			g.board.grid[y] = src.grid[y].duplicate()
+		g.start_with_queue(d.queue)
+		check(g.piece == d.queue[0] and g.next_queue()[0] == d.queue[1], "パフェ練習: 決めた順番でミノが出る")
+		# 手順どおりに置くと全消しになる
+		var perfect := false
+		g.event.connect(func(kind, data): if kind == "clear" and data.perfect: perfect = true)
+		var follows := true
+		for step in d.steps:
+			follows = follows and g.piece == step.type and CpuBrain.rows_from(g.board) == step.rows
+			g.piece = step.type
+			g.rot = step.rot
+			g.pos = Vector2i(step.x, step.y)
+			g.hard_drop()
+			for _t in 40:
+				g.tick()
+		check(follows, "パフェ練習 %d: 手順の途中の盤面が記録と同じ" % i)
+		check(g.board.is_empty(), "パフェ練習 %d: 手順どおりで全消し" % i)
 
 
 func test_hold_can_be_disabled() -> void:

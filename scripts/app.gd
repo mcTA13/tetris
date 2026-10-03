@@ -35,6 +35,8 @@ var best_40l_ticks := 0         # 0 は記録なし
 var marathon_best_score := 0
 var ultra_best_score := 0
 var dig_best := 0               # 掘りモードで掘った最多段数
+var ren_best := 0               # REN 練習の最大 REN
+var practice := "spin_t"        # 練習の種類（Mode.PRACTICE のとき。保存しない）
 var menu_category := ""         # タイトルで開いていた大分類（保存しない）
 # CPU 対戦
 var versus_level := 3           # 1〜5、6 は隠しの TAS
@@ -101,6 +103,14 @@ func submit_dig(dug: int) -> bool:
 	return true
 
 
+func submit_ren(ren: int) -> bool:
+	if ren <= ren_best:
+		return false
+	ren_best = ren
+	save()
+	return true
+
+
 func submit_marathon(score: int) -> bool:
 	if score <= marathon_best_score:
 		return false
@@ -126,6 +136,7 @@ func save() -> void:
 		"marathon_best_score": marathon_best_score,
 		"ultra_best_score": ultra_best_score,
 		"dig_best": dig_best,
+		"ren_best": ren_best,
 		"versus_level": versus_level,
 		"versus_first_to": versus_first_to,
 		"versus_records": versus_records,
@@ -145,6 +156,7 @@ func _load() -> void:
 	marathon_best_score = int(data.get("marathon_best_score", 0))
 	ultra_best_score = int(data.get("ultra_best_score", 0))
 	dig_best = int(data.get("dig_best", 0))
+	ren_best = int(data.get("ren_best", 0))
 	versus_level = clampi(int(data.get("versus_level", 3)), 1, 5)  # 隠しの TAS は毎回コマンドで出す
 	versus_first_to = clampi(int(data.get("versus_first_to", 2)), 1, 3)
 	var saved_demo = data.get("demo_levels", [4, 4])

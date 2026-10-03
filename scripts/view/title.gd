@@ -1,28 +1,40 @@
 extends Node2D
-## タイトル。左に大分類のメニュー（決定した大分類の中身が開く）、
+## タイトル。左に大分類のメニュー（決定した大分類の中身が開く。中分類はさらにその中身が開く）、
 ## 右に選んでいるものの説明・記録と、CPU（Lv.4）が積み続ける小さなデモ盤面。
 ## 新しい版があれば、メニューの最後に「アップデート」が出る。
 
 const CATEGORIES := [
-	{"key": "cat_solo", "items": ["40l", "marathon", "ultra", "dig"]},
-	{"key": "cat_practice", "items": ["practice"]},
+	{"key": "cat_solo", "items": ["40l", "marathon", "ultra"]},
+	{"key": "cat_practice", "items": ["spin", "dig", "pc", "ren", "opener"]},
 	{"key": "cat_versus", "items": ["versus", "demo"]},
 	{"key": "menu_settings", "items": []},  # 中身なし: 決定でそのまま設定画面へ
 ]
 const UPDATE_CATEGORY := {"key": "menu_update", "items": []}
+# 中分類: 決定するとさらに中身が開く
+const SUB_ITEMS := {
+	"spin": ["spin_t", "spin_sz", "spin_lj", "spin_random"],
+	"opener": ["op_dt", "op_tki", "op_pco", "op_honey", "op_mountain"],
+}
 const ITEM_LABELS := {
 	"40l": "mode_40l", "marathon": "mode_marathon", "ultra": "mode_ultra", "dig": "mode_dig",
-	"practice": "mode_practice", "versus": "mode_versus", "demo": "mode_demo",
+	"versus": "mode_versus", "demo": "mode_demo", "spin": "mode_spin", "pc": "mode_pc", "ren": "mode_ren",
+	"spin_t": "mode_spin_t", "spin_sz": "mode_spin_sz", "spin_lj": "mode_spin_lj", "spin_random": "mode_spin_random",
+	"opener": "mode_opener", "op_dt": "mode_op_dt", "op_tki": "mode_op_tki", "op_pco": "mode_op_pco",
+	"op_honey": "mode_op_honey", "op_mountain": "mode_op_mountain",
 }
 const ITEM_MODES := {
-	"40l": App.Mode.SPRINT_40L, "marathon": App.Mode.MARATHON, "ultra": App.Mode.ULTRA,
-	"dig": App.Mode.DIG, "practice": App.Mode.PRACTICE,
+	"40l": App.Mode.SPRINT_40L, "marathon": App.Mode.MARATHON, "ultra": App.Mode.ULTRA, "dig": App.Mode.DIG,
 }
+# 練習（App.Mode.PRACTICE）の種類。App.practice に入れる
+const PRACTICE_ITEMS := ["spin_t", "spin_sz", "spin_lj", "spin_random", "pc", "ren",
+	"op_dt", "op_tki", "op_pco", "op_honey", "op_mountain"]
 const MENU_X := 90.0
 const MENU_W := 400.0
 const MENU_TOP := 196.0
 const CAT_H := 58.0
 const ITEM_H := 46.0
+const SUB_H := 38.0
+const SUB_INDENT := 36.0
 const PANEL := Rect2(560, 150, 660, 480)
 const DEMO_CELL := 16.0
 const DEMO_POS := Vector2(1020, 280)
@@ -33,6 +45,7 @@ const NOTE_LINE_H := NOTE_SIZE * 1.6
 var _categories: Array = CATEGORIES.duplicate()
 var _cat := 0                   # カーソルのある大分類
 var _item := -1                 # 大分類の中の項目（-1 は大分類そのもの）
+var _sub := -1                  # 中分類の中の項目（-1 は中分類そのもの）
 var _update_open := false       # アップデートを決定して、リリースノートを全部見ている
 var _note_scroll := 0           # リリースノートの何行目から見せるか
 var _note_rows := []            # 折り返したリリースノート [文字列, 色の役割]（最初に描くときに作る）
@@ -52,8 +65,13 @@ func _ready() -> void:
 			_cat = i
 			var items: Array = _categories[i].items
 			for j in items.size():
-				if (items[j] == "demo" and App.demo) or (ITEM_MODES.get(items[j], -1) == App.mode and not App.demo):
+				if _is_current(items[j]):
 					_item = j
+				var subs: Array = SUB_ITEMS.get(items[j], [])
+				for k in subs.size():
+					if _is_current(subs[k]):
+						_item = j
+						_sub = k
 	App.demo = false
 
 	_demo_view.cell = DEMO_CELL
@@ -62,6 +80,24 @@ func _ready() -> void:
 	add_child(_demo_view)
 	_demo_view.set_base_position(DEMO_POS)
 	_restart_demo()
+
+
+## 直前に遊んでいたモードか
+func _is_current(item: String) -> bool:
+	if item == "demo":
+		return App.demo
+	if App.demo:
+		return false
+	if PRACTICE_ITEMS.has(item):
+		return App.mode == App.Mode.PRACTICE and App.practice == item
+	return ITEM_MODES.get(item, -1) == App.mode
+
+
+## 中分類の項目（中分類でなければ空）
+func _subs() -> Array:
+	if _item < 0:
+		return []
+	return SUB_ITEMS.get(_categories[_cat].items[_item], [])
 
 
 ## 新しい版が見つかったら、メニューの最後に「アップデート」を足す
@@ -107,7 +143,7 @@ func _process(delta: float) -> void:
 		"up":
 			_move(-1)
 		"right":
-			if _item < 0:
+			if _item < 0 or (_sub < 0 and not _subs().is_empty()):
 				_select()
 		"left":
 			if _item >= 0:
@@ -141,7 +177,9 @@ func _close_update() -> void:
 
 ## 上下の移動。大分類を選んでいるときは大分類の間だけ、項目を選んでいるときはその大分類の中だけ
 func _move(step: int) -> void:
-	if _item < 0:
+	if _sub >= 0:
+		_sub = (_sub + step + _subs().size()) % _subs().size()
+	elif _item < 0:
 		_cat = (_cat + step + _categories.size()) % _categories.size()
 		App.menu_category = _categories[_cat].key
 	else:
@@ -164,19 +202,31 @@ func _select() -> void:
 			App.menu_category = _categories[_cat].key
 		return
 	var item: String = items[_item]
+	if not _subs().is_empty():
+		if _sub < 0:
+			_sub = 0
+			return
+		item = _subs()[_sub]
 	App.menu_category = _categories[_cat].key
 	match item:
 		"versus", "demo":
 			App.demo = item == "demo"
 			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
 		_:
-			App.mode = ITEM_MODES[item]
+			if PRACTICE_ITEMS.has(item):
+				App.mode = App.Mode.PRACTICE
+				App.practice = item
+			else:
+				App.mode = ITEM_MODES[item]
 			get_tree().change_scene_to_file("res://scenes/game.tscn")
 
 
 func _back() -> void:
 	Sfx.play("menu_back")
-	_item = -1
+	if _sub >= 0:
+		_sub = -1
+	else:
+		_item = -1
 
 
 # ---------------- 描画 ----------------
@@ -222,14 +272,27 @@ func _draw_menu(skin: UiSkin) -> void:
 		if not open:
 			continue
 		for j in c.items.size():
+			# 中分類を開いている間は、ほかの項目を隠す（メニューが画面からはみ出さないように）
+			if _sub >= 0 and j != _item:
+				continue
 			var item_rect := Rect2(MENU_X + 36, y, MENU_W - 36, ITEM_H - 6)
-			var item_selected: bool = j == _item
+			var item_selected: bool = j == _item and _sub < 0
 			skin.draw_item(self, item_rect, item_selected, _time)
-			# 大分類を選んでいる間は、中身はまだ選べないので薄く見せる
-			var role := "text_on_accent" if item_selected else ("text_dim" if _item < 0 else "text")
-			skin.draw_text(self, Vector2(item_rect.position.x + 22, item_rect.position.y + 29), Loc.t(ITEM_LABELS[c.items[j]]), 22,
+			var role := "text_on_accent" if item_selected else "text"
+			var label := Loc.t(ITEM_LABELS[c.items[j]])
+			if SUB_ITEMS.has(c.items[j]):
+				label = ("▼ " if _sub >= 0 else "▶ ") + label
+			skin.draw_text(self, Vector2(item_rect.position.x + 22, item_rect.position.y + 29), label, 22,
 				role, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 			y += ITEM_H
+			if _sub < 0 or j != _item:
+				continue
+			for k in _subs().size():
+				var sub_rect := Rect2(MENU_X + 36 + SUB_INDENT, y, MENU_W - 36 - SUB_INDENT, SUB_H - 6)
+				skin.draw_item(self, sub_rect, k == _sub, _time)
+				skin.draw_text(self, Vector2(sub_rect.position.x + 20, sub_rect.position.y + 24), Loc.t(ITEM_LABELS[_subs()[k]]), 20,
+					"text_on_accent" if k == _sub else "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+				y += SUB_H
 		y += 6
 
 
@@ -238,6 +301,8 @@ func _draw_preview(skin: UiSkin) -> void:
 	skin.draw_panel(self, PANEL)
 	var c: Dictionary = _categories[_cat]
 	var item: String = c.items[_item] if _item >= 0 else ""
+	if _sub >= 0:
+		item = _subs()[_sub]
 	var title := Loc.t(ITEM_LABELS[item]) if item != "" else Loc.t(c.key)
 	var desc := Loc.t("desc_" + item) if item != "" else Loc.t("desc_" + c.key)
 	var left := PANEL.position.x + 36
@@ -248,10 +313,11 @@ func _draw_preview(skin: UiSkin) -> void:
 	skin.draw_text(self, Vector2(left, PANEL.position.y + 70), title, 40, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	draw_line(Vector2(left, PANEL.position.y + 92), Vector2(left + text_w, PANEL.position.y + 92), skin.colors.text_dim, 2.0)
 	_draw_wrapped(skin, desc, Vector2(left, PANEL.position.y + 136), text_w, 20)
-	# 大分類を選んでいる間は、その中身を一覧で見せる
-	if item == "":
-		for j in c.items.size():
-			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + Loc.t(ITEM_LABELS[c.items[j]]), 24,
+	# 大分類・中分類を選んでいる間は、その中身を一覧で見せる
+	var contents: Array = c.items if item == "" else SUB_ITEMS.get(item, [])
+	if _sub < 0:
+		for j in contents.size():
+			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + Loc.t(ITEM_LABELS[contents[j]]), 24,
 				"text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	var record := _record_text(item)
 	if record != "":
@@ -335,6 +401,8 @@ func _record_text(item: String) -> String:
 			return "%s  %d" % [Loc.t("high_score"), App.ultra_best_score]
 		"dig":
 			return "%s  %d" % [Loc.t("best"), App.dig_best]
+		"ren":
+			return "%s  %d" % [Loc.t("ren_max"), App.ren_best]
 		"versus":
 			var r: Array = App.versus_record(App.versus_level)
 			return "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [r[0], r[1]]]
