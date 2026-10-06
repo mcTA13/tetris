@@ -27,12 +27,13 @@ func pop() -> int:
 	return _queue.pop_front()
 
 
-## 決まった順番のミノを先頭に足す（練習用。7 種 1 巡の区切りの数え方はずれる）
+## 決まった順番のミノを先頭に足す（練習用）。足した分は 1 巡の区切りの数に入れない
 func push_front(pieces: Array) -> void:
 	var front: Array[int] = []
 	front.assign(pieces)
 	front.append_array(_queue)
 	_queue = front
+	_taken -= pieces.size()
 
 
 ## 先頭から visible 個を見たあと、その 1 巡にまだ残っているミノ（見たものが 1 巡の終わりなら次の 1 巡の全種類）
@@ -47,10 +48,14 @@ func remaining_after(visible: int) -> Array[int]:
 func _refill() -> void:
 	var pieces: Array[int] = []
 	pieces.assign(PieceData.ALL)
-	# Fisher-Yates（RNGを固定するため shuffle() は使わない）
-	for i in range(pieces.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var tmp := pieces[i]
-		pieces[i] = pieces[j]
-		pieces[j] = tmp
+	shuffle(pieces, _rng)
 	_queue.append_array(pieces)
+
+
+## Fisher-Yates（RNG を固定して同じ順番を再現できるよう、Array.shuffle() は使わない）
+static func shuffle(a: Array, rng: RandomNumberGenerator) -> void:
+	for i in range(a.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp = a[i]
+		a[i] = a[j]
+		a[j] = tmp

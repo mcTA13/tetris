@@ -43,9 +43,7 @@ func guide(game: GameState) -> Dictionary:
 	if not show_hint or _next >= _drill.steps.size():
 		return {}
 	var step: Dictionary = _drill.steps[_next]
-	if step.type != game.piece:
-		return {}
-	return {"type": step.type, "x": step.x, "y": step.y, "rot": step.rot, "hold": false}
+	return step if step.type == game.piece else {}
 
 
 func stats() -> Array:

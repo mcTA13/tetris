@@ -31,7 +31,8 @@ func _ready() -> void:
 	await _frames(5)
 	_save(out_dir + "/shot_settings.png")
 	App.settings.label_style = "ps"
-	settings._page = "pad"
+	settings._tab = 4
+	settings._remap = true
 	settings._index = 4
 	settings._waiting = 3.5
 	await _frames(5)

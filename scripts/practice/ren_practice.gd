@@ -35,7 +35,7 @@ func continuous() -> bool:
 	return true
 
 
-func judge(kind: String, data: Dictionary, game: GameState) -> String:
+func on_event(kind: String, data: Dictionary, game: GameState) -> void:
 	match kind:
 		"clear":
 			_max_ren = maxi(_max_ren, data.combo)
@@ -43,7 +43,6 @@ func judge(kind: String, data: Dictionary, game: GameState) -> String:
 			_refill(game.board)
 		"game_over":
 			_new_record = App.submit_ren(_max_ren)
-	return ""
 
 
 ## 右 6 列を下から STACK_H 段まで埋める（その段が全部埋まってしまうマスは埋めない）

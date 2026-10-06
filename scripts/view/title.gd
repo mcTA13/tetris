@@ -15,19 +15,11 @@ const SUB_ITEMS := {
 	"spin": ["spin_t", "spin_sz", "spin_lj", "spin_random"],
 	"opener": ["op_dt", "op_tki", "op_pco", "op_honey", "op_mountain"],
 }
-const ITEM_LABELS := {
-	"40l": "mode_40l", "marathon": "mode_marathon", "ultra": "mode_ultra", "dig": "mode_dig",
-	"versus": "mode_versus", "demo": "mode_demo", "spin": "mode_spin", "pc": "mode_pc", "ren": "mode_ren",
-	"spin_t": "mode_spin_t", "spin_sz": "mode_spin_sz", "spin_lj": "mode_spin_lj", "spin_random": "mode_spin_random",
-	"opener": "mode_opener", "op_dt": "mode_op_dt", "op_tki": "mode_op_tki", "op_pco": "mode_op_pco",
-	"op_honey": "mode_op_honey", "op_mountain": "mode_op_mountain",
-}
 const ITEM_MODES := {
 	"40l": App.Mode.SPRINT_40L, "marathon": App.Mode.MARATHON, "ultra": App.Mode.ULTRA, "dig": App.Mode.DIG,
 }
-# 練習（App.Mode.PRACTICE）の種類。App.practice に入れる
-const PRACTICE_ITEMS := ["spin_t", "spin_sz", "spin_lj", "spin_random", "pc", "ren",
-	"op_dt", "op_tki", "op_pco", "op_honey", "op_mountain"]
+# 項目の名前は Loc の "mode_" + 項目、説明は "desc_" + 項目。
+# ITEM_MODES にも SUB_ITEMS にもない項目（対戦・デモを除く）は練習の種類（App.practice に入れる）
 const MENU_X := 90.0
 const MENU_W := 400.0
 const MENU_TOP := 196.0
@@ -38,9 +30,10 @@ const SUB_INDENT := 36.0
 const PANEL := Rect2(560, 150, 660, 480)
 const DEMO_CELL := 16.0
 const DEMO_POS := Vector2(1020, 280)
-const DEMO_LEVEL := 4
+const DEMO_LEVEL := 6
 const NOTE_SIZE := 17
 const NOTE_LINE_H := NOTE_SIZE * 1.6
+const BOTTOM_SIZE := 20         # アップデートのパネルの一番下の行（案内・進み具合）
 
 var _categories: Array = CATEGORIES.duplicate()
 var _cat := 0                   # カーソルのある大分類
@@ -88,9 +81,17 @@ func _is_current(item: String) -> bool:
 		return App.demo
 	if App.demo:
 		return false
-	if PRACTICE_ITEMS.has(item):
+	if _is_practice(item):
 		return App.mode == App.Mode.PRACTICE and App.practice == item
 	return ITEM_MODES.get(item, -1) == App.mode
+
+
+static func _is_practice(item: String) -> bool:
+	return not ITEM_MODES.has(item) and not SUB_ITEMS.has(item) and item != "versus" and item != "demo"
+
+
+static func _label(item: String) -> String:
+	return Loc.t("mode_" + item)
 
 
 ## 中分類の項目（中分類でなければ空）
@@ -213,7 +214,7 @@ func _select() -> void:
 			App.demo = item == "demo"
 			get_tree().change_scene_to_file("res://scenes/versus_setup.tscn")
 		_:
-			if PRACTICE_ITEMS.has(item):
+			if _is_practice(item):
 				App.mode = App.Mode.PRACTICE
 				App.practice = item
 			else:
@@ -279,7 +280,7 @@ func _draw_menu(skin: UiSkin) -> void:
 			var item_selected: bool = j == _item and _sub < 0
 			skin.draw_item(self, item_rect, item_selected, _time)
 			var role := "text_on_accent" if item_selected else "text"
-			var label := Loc.t(ITEM_LABELS[c.items[j]])
+			var label := _label(c.items[j])
 			if SUB_ITEMS.has(c.items[j]):
 				label = ("▼ " if _sub >= 0 else "▶ ") + label
 			skin.draw_text(self, Vector2(item_rect.position.x + 22, item_rect.position.y + 29), label, 22,
@@ -287,10 +288,11 @@ func _draw_menu(skin: UiSkin) -> void:
 			y += ITEM_H
 			if _sub < 0 or j != _item:
 				continue
-			for k in _subs().size():
+			var subs := _subs()
+			for k in subs.size():
 				var sub_rect := Rect2(MENU_X + 36 + SUB_INDENT, y, MENU_W - 36 - SUB_INDENT, SUB_H - 6)
 				skin.draw_item(self, sub_rect, k == _sub, _time)
-				skin.draw_text(self, Vector2(sub_rect.position.x + 20, sub_rect.position.y + 24), Loc.t(ITEM_LABELS[_subs()[k]]), 20,
+				skin.draw_text(self, Vector2(sub_rect.position.x + 20, sub_rect.position.y + 24), _label(subs[k]), 20,
 					"text_on_accent" if k == _sub else "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 				y += SUB_H
 		y += 6
@@ -303,7 +305,7 @@ func _draw_preview(skin: UiSkin) -> void:
 	var item: String = c.items[_item] if _item >= 0 else ""
 	if _sub >= 0:
 		item = _subs()[_sub]
-	var title := Loc.t(ITEM_LABELS[item]) if item != "" else Loc.t(c.key)
+	var title := _label(item) if item != "" else Loc.t(c.key)
 	var desc := Loc.t("desc_" + item) if item != "" else Loc.t("desc_" + c.key)
 	var left := PANEL.position.x + 36
 	var text_w := DEMO_POS.x - left - 30
@@ -317,7 +319,7 @@ func _draw_preview(skin: UiSkin) -> void:
 	var contents: Array = c.items if item == "" else SUB_ITEMS.get(item, [])
 	if _sub < 0:
 		for j in contents.size():
-			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + Loc.t(ITEM_LABELS[contents[j]]), 24,
+			skin.draw_text(self, Vector2(left + 8, PANEL.position.y + 240 + j * 44), "・" + _label(contents[j]), 24,
 				"text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	var record := _record_text(item)
 	if record != "":
@@ -351,12 +353,16 @@ func _draw_update(skin: UiSkin, left: float, width: float) -> void:
 	var bottom := "v%s → v%s" % [Updater.current_version(), Updater.latest_version]
 	if _update_open or Updater.downloading or Updater.failed:
 		bottom = _update_status()
-	skin.draw_text(self, Vector2(left, PANEL.end.y - 30), bottom, 22, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	# 一番下の行は幅に合わせて折り返し、下から積む（長い案内文がパネルからはみ出さないように）
+	var lines := _wrap(skin, bottom, width, BOTTOM_SIZE)
+	for i in lines.size():
+		var y_line := PANEL.end.y - 24 - (lines.size() - 1 - i) * BOTTOM_SIZE * 1.5
+		skin.draw_text(self, Vector2(left, y_line), lines[i], BOTTOM_SIZE, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 
 
 ## リリースノートを何行見せられるか（決定前は説明の下に冒頭だけ）
 func _notes_visible(open: bool) -> int:
-	return 11 if open else 7
+	return 10 if open else 6
 
 
 func _update_status() -> String:
@@ -405,7 +411,7 @@ func _record_text(item: String) -> String:
 			return "%s  %d" % [Loc.t("ren_max"), App.ren_best]
 		"versus":
 			var r: Array = App.versus_record(App.versus_level)
-			return "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [r[0], r[1]]]
+			return "%s  %s" % [App.level_name(App.versus_level), Loc.t("record") % [r[0], r[1]]]
 		"demo":
 			return Loc.t("demo_desc") % [App.demo_levels[0], App.demo_levels[1]]
 	return ""

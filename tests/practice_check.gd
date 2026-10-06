@@ -49,7 +49,7 @@ func test_ren_practice_keeps_stack() -> void:
 	check(well == 3, "REN練習: 左 4 列の底に 3 マス残してある (%d)" % well)
 	# 一番下の段を消したあと、右側が積み足される
 	g.board.remove_rows([Board.HEIGHT - 1])
-	p.judge("rows_collapsed", {}, g)
+	p.on_event("rows_collapsed", {}, g)
 	var top_ok := true
 	for x in range(RenPractice.WELL, Board.WIDTH):
 		top_ok = top_ok and g.board.grid[Board.HEIGHT - RenPractice.STACK_H][x] != PieceData.NONE

@@ -3,13 +3,9 @@ extends Node2D
 ## ここでは入力・進行・情報パネル・バナー・ポーズを受け持つ。練習ごとの決まりは Practice（scripts/practice/）。
 ## 40ラインでアシストがオンなら、Cold Clear 2 のおすすめの置き場所をガイドとして出す。
 
-const CELL := 30.0
-const BOARD_POS := Vector2(490, 70)
-const HOLD_RECT := Rect2(318, 70, 148, 124)
-const NEXT_RECT := Rect2(814, 70, 148, 440)
-const STATS_RECT := Rect2(298, 214, 168, 0)  # 高さは項目数で決まる
-const STAT_H := 62
-const COUNTER_POS := Vector2(814, 548)
+# 右側の情報欄: 1 行ずつ、項目名を左寄せ・値を右寄せ。1 行目はモード名、最後の行はタイム
+const INFO_RECT := Rect2(660, 150, 520, 0)  # 高さは行数で決まる
+const INFO_ROW_H := 56
 const READY_TICKS := 45
 const GO_TICKS := 30
 const ASSIST_THINK_TICKS := 9   # アシスト: おすすめを聞くまで Cold Clear 2 に考えさせる時間
@@ -49,12 +45,9 @@ var _practice_timer := 0
 
 
 func _ready() -> void:
-	_field.cell = CELL
-	_field.board_pos = BOARD_POS
-	_field.hold_rect = HOLD_RECT
-	_field.next_rect = NEXT_RECT
-	_field.counter_pos = COUNTER_POS
+	_field.use_standard_layout()
 	add_child(_field)
+	_field.set_base_position(FieldView.PLAYER_BASE)
 	add_child(_overlay)
 	_overlay.draw.connect(_draw_overlay)
 	if App.mode == App.Mode.PRACTICE:
@@ -74,6 +67,8 @@ static func _make_practice(kind: String) -> Practice:
 			return RenPractice.new()
 	if kind.begins_with("op_"):
 		return OpenerPractice.new(kind)
+	if not kind.begins_with("spin_"):
+		push_error("unknown practice: " + kind)
 	return SpinPractice.new(kind)
 
 
@@ -99,9 +94,10 @@ func _new_game(countdown := true) -> void:
 	# マラソン・ウルトラはレベルが上がっていく（ウルトラは 2 分で終わり）
 	game.event.connect(_on_game_event)
 	_field.setup(game, true)
+	# 消し方の表示（T-SPIN DOUBLE など）は、幅のある情報欄の下に出す
+	var info_bottom := INFO_RECT.position.y + _info_rows().size() * INFO_ROW_H + 16
+	_field.message_rect = Rect2(INFO_RECT.position - FieldView.PLAYER_BASE + Vector2(0, info_bottom - INFO_RECT.position.y + 40), Vector2(INFO_RECT.size.x, 0))
 	_field.show_meter = App.mode == App.Mode.DIG
-	var stats_h := _stats().size() * STAT_H + 16
-	_field.message_rect = Rect2(STATS_RECT.position.x - 20, STATS_RECT.position.y + stats_h + 44, STATS_RECT.size.x + 40, 0)
 	input = InputHandler.new(game)
 	App.configure(game, input)
 	input.prime(InputSetup.poll()[0])
@@ -131,8 +127,7 @@ func _new_game(countdown := true) -> void:
 func _start_game() -> void:
 	Bgm.play()
 	if _practice != null:
-		_practice.start(game)
-		_show_practice_guide()
+		_practice.start(game)  # 出現（spawn）のイベントでお手本も出る
 	else:
 		game.start()
 
@@ -187,8 +182,6 @@ func _physics_process(delta: float) -> void:
 		_update_practice()
 		return
 	game.tick()
-	if _practice != null:
-		_practice.update(game)
 	_update_mode_rules()
 	if game.level > _last_level:
 		_last_level = game.level
@@ -225,7 +218,7 @@ func _update_practice() -> void:
 func _show_practice_guide() -> void:
 	var g := _practice.guide(game)
 	if not g.is_empty():
-		_field.set_guide(g.type, Vector2i(g.x, g.y), g.rot, g.hold)
+		_field.set_guide(g.type, Vector2i(g.x, g.y), g.rot, false)
 
 
 ## ポーズ中: 上下で選んで決定。ポーズ / 戻るボタンでそのまま再開
@@ -292,10 +285,12 @@ func _process(delta: float) -> void:
 
 
 func _on_game_event(kind: String, data: Dictionary) -> void:
-	if _practice != null and _practice_result == "":
-		_practice_result = _practice.judge(kind, data, game)
-		if _practice_result != "":
-			_practice_timer = PRACTICE_RESULT_TICKS
+	if _practice != null:
+		_practice.on_event(kind, data, game)
+		if _practice_result == "":
+			_practice_result = _practice.judge(kind, data, game)
+			if _practice_result != "":
+				_practice_timer = PRACTICE_RESULT_TICKS
 	match kind:
 		"spawn":
 			if _assist != null:
@@ -338,7 +333,7 @@ func _on_game_event(kind: String, data: Dictionary) -> void:
 func _draw() -> void:
 	var skin: UiSkin = App.skin
 	skin.draw_background(self, Vector2(1280, 720), _time)
-	_draw_stats()
+	_draw_info()
 	var hint := Loc.t("hint_game") % [InputSetup.action_hint("retry"), InputSetup.action_hint("pause")]
 	skin.draw_text(self, Vector2(24, 700), hint, 15, "text")
 
@@ -346,7 +341,7 @@ func _draw() -> void:
 ## 盤面より手前: READY / GO、リザルト、ポーズ
 func _draw_overlay() -> void:
 	var skin: UiSkin = App.skin
-	var center := BOARD_POS + Vector2(Board.WIDTH, Board.VISIBLE_ROWS) * CELL / 2.0
+	var center := _field.position + _field.board_rect().get_center()
 	if game.is_finished():
 		_draw_result(center)
 	elif paused:
@@ -362,37 +357,47 @@ func _draw_overlay() -> void:
 		draw_banner(_overlay, center, ["NICE!"])
 
 
-func _stats() -> Array:
-	var seconds := game.ticks / 60.0
-	var pps := game.pieces_placed / seconds if seconds > 0 else 0.0
-	if App.mode == App.Mode.SPRINT_40L:
-		var s := [[Loc.t("time"), App.format_time(game.ticks)], [Loc.t("lines"), "%d / 40" % mini(game.lines, 40)], [Loc.t("pps"), "%.2f" % pps]]
-		if _assist != null:
-			s.append([Loc.t("assist"), Loc.t("assist_" + App.settings.assist)])
-		return s
+## 情報欄の行 [項目名, 値]。1 行目はモード名、最後の行はタイム、間はモードごとに必要なもの
+func _info_rows() -> Array:
+	var mode_name := Loc.t(App.MODE_KEYS[App.mode])
+	if App.mode == App.Mode.PRACTICE:
+		mode_name = Loc.t("mode_" + App.practice)
+	return [[Loc.t("mode"), mode_name]] + _mode_rows() + [[Loc.t("time"), App.format_time(game.ticks)]]
+
+
+func _mode_rows() -> Array:
 	match App.mode:
+		App.Mode.SPRINT_40L:
+			var seconds := game.ticks / 60.0
+			var pps := game.pieces_placed / seconds if seconds > 0 else 0.0
+			var s := [[Loc.t("lines"), "%d / 40" % mini(game.lines, 40)], [Loc.t("pps"), "%.2f" % pps]]
+			if _assist != null:
+				s.append([Loc.t("assist"), Loc.t("assist_" + App.settings.assist)])
+			return s
 		App.Mode.ULTRA:
-			return [[Loc.t("score"), str(game.score)], [Loc.t("time_left"), App.format_time(maxi(ULTRA_TICKS - game.ticks, 0))],
-				[Loc.t("level"), str(game.level)], [Loc.t("lines"), str(game.lines)]]
+			return [[Loc.t("score"), str(game.score)], [Loc.t("lines"), str(game.lines)], [Loc.t("level"), str(game.level)],
+				[Loc.t("time_left"), App.format_time(maxi(ULTRA_TICKS - game.ticks, 0))]]
 		App.Mode.DIG:
-			return [[Loc.t("dug"), str(_dug)], [Loc.t("time"), App.format_time(game.ticks)],
-				[Loc.t("next_rise"), "%.1f s" % (_dig_timer / 60.0)]]
+			return [[Loc.t("dug"), str(_dug)], [Loc.t("next_rise"), "%.1f s" % (_dig_timer / 60.0)]]
 		App.Mode.PRACTICE:
 			return _practice.stats()
-	return [[Loc.t("score"), str(game.score)], [Loc.t("level"), str(game.level)],
-		[Loc.t("lines"), str(game.lines)], [Loc.t("time"), App.format_time(game.ticks)]]
+	return [[Loc.t("score"), str(game.score)], [Loc.t("level"), str(game.level)], [Loc.t("lines"), str(game.lines)]]
 
 
-func _draw_stats() -> void:
+func _draw_info() -> void:
 	var skin: UiSkin = App.skin
-	var stats := _stats()
-	var rect := STATS_RECT
-	rect.size.y = stats.size() * STAT_H + 16
+	var rows := _info_rows()
+	var rect := INFO_RECT
+	rect.size.y = rows.size() * INFO_ROW_H + 16
 	skin.draw_panel(self, rect)
-	for i in stats.size():
-		var top := rect.position.y + 10 + i * STAT_H
-		skin.draw_text(self, Vector2(rect.position.x + 16, top + 20), stats[i][0], 15, "text_dim", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
-		skin.draw_text(self, Vector2(rect.position.x + 16, top + 50), stats[i][1], 26, "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+	for i in rows.size():
+		var base := Vector2(rect.position.x + 28, rect.position.y + 8 + i * INFO_ROW_H + 38)
+		var w := rect.size.x - 56
+		skin.draw_text(self, base, rows[i][0], 20, "text_dim", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+		skin.draw_text(self, base, rows[i][1], 28, "text", HORIZONTAL_ALIGNMENT_RIGHT, w, true)
+		if i < rows.size() - 1:
+			var y := rect.position.y + 8 + (i + 1) * INFO_ROW_H
+			draw_line(Vector2(base.x, y), Vector2(base.x + w, y), Color(skin.colors.text_dim, 0.35), 1.0)
 
 
 func _draw_result(center: Vector2) -> void:

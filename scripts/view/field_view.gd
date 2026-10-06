@@ -5,7 +5,7 @@ extends Node2D
 ## is_player が true なら操作音と振動も出す（CPU 側は消去の音だけ小さめに）。
 
 const LOCK_FLASH_TIME := 0.15
-const SHOW_HIDDEN_ROWS := 2     # 盤面の上にはみ出して見せる行数
+const SHOW_HIDDEN_ROWS := 0     # 盤面の上にはみ出して見せる行数（出てきたミノのはみ出した部分は見せない）
 const MESSAGE_TIME := 1.5
 const SPIN_NAMES := ["", "MINI ", ""]
 const LINE_NAMES := ["", "SINGLE", "DOUBLE", "TRIPLE", "TETRIS"]
@@ -54,6 +54,19 @@ func set_guide(type: int, pos: Vector2i, rot: int, hold: bool) -> void:
 
 func clear_guide() -> void:
 	_guide = {}
+
+
+## 一人用と対戦で共通の並び（左からホールド・盤面・NEXT）。自分の盤面はどの画面でも PLAYER_BASE に置く
+const PLAYER_BASE := Vector2(88, 150)
+
+
+func use_standard_layout() -> void:
+	cell = 24.0
+	hold_rect = Rect2(0, 0, 100, 92)
+	board_pos = Vector2(126, 0)
+	next_rect = Rect2(378, 0, 104, 330)
+	counter_pos = Vector2(378, 372)
+	message_rect = Rect2(-10, 150, 120, 0)
 
 
 func set_base_position(p: Vector2) -> void:

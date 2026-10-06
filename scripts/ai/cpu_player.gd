@@ -5,7 +5,8 @@ extends RefCounted
 ## （ホールド・移動・回転・その場落下・ハードドロップ）を人間と同じように 1 つずつ入力する。
 ## 重力でずれたら操作列を求め直す。
 
-const TAS_LEVEL := 6
+const MAX_LEVEL := 7            # ふつうに選べる強さの上限
+const TAS_LEVEL := 8            # 隠しの TAS
 ## 強さごとの設定
 ##  pps: 1秒に置く数の上限 / interval: 操作 1 回の間隔（tick、0 は 1 tick にまとめて）
 ##  depth: 何手先まで読むか / beam: 読むときに残す候補の数
@@ -13,18 +14,28 @@ const TAS_LEVEL := 6
 ##  mistake: 最善でない手を選ぶ確率 / mistake_margin: そのとき選んでよい、1番よい手との点数差
 ##  clean: きれいに積む評価（El-Tetris 型）を使う。浅い読みでも穴を作りにくい
 ##  cold_clear: Cold Clear 2 に考えさせる / think_ticks: そのとき考えさせる時間（tick）
+##  stars: 強さの目安 [速さ, 読み, 攻撃]（星 5 つまで。対戦の準備画面に出す）
 const CONFIG := {
-	1: {"pps": 0.7, "interval": 6, "depth": 1, "beam": 1, "spins": false, "use_hold": false, "mistake": 0.3, "mistake_margin": 40.0, "clean": true},
-	2: {"pps": 1.2, "interval": 5, "depth": 1, "beam": 1, "spins": false, "use_hold": true, "mistake": 0.12, "mistake_margin": 20.0, "clean": true},
-	3: {"pps": 1.8, "interval": 4, "depth": 2, "beam": 3, "spins": true, "use_hold": true, "mistake": 0.04, "mistake_margin": 5.0, "clean": true, "attack_weight": 8.0},
-	# Lv.4: 上級者くらいの速さ（2 PPS、1 マス 4F で動かす）
-	4: {"pps": 2.0, "interval": 4, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
-		"cold_clear": true, "think_ticks": 6},
-	# Lv.5: 人が出せる速さの上限（3 PPS、横移動の押しっぱなしと同じ 1 マス 2F で動かす）で、考える力は最大
-	5: {"pps": 3.0, "interval": 2, "depth": 2, "beam": 6, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
-		"cold_clear": true, "think_ticks": 3},
+	1: {"pps": 0.7, "interval": 6, "depth": 1, "beam": 1, "spins": false, "use_hold": false, "mistake": 0.3, "mistake_margin": 40.0, "clean": true,
+		"stars": [1, 1, 1]},
+	2: {"pps": 1.2, "interval": 5, "depth": 1, "beam": 1, "spins": false, "use_hold": true, "mistake": 0.12, "mistake_margin": 20.0, "clean": true,
+		"stars": [2, 1, 1]},
+	# Lv.3: Lv.2 と Lv.4 の間（Tスピンも狙い始める）
+	3: {"pps": 1.5, "interval": 5, "depth": 1, "beam": 2, "spins": true, "use_hold": true, "mistake": 0.08, "mistake_margin": 12.0, "clean": true,
+		"attack_weight": 4.0, "stars": [2, 2, 2]},
+	4: {"pps": 1.8, "interval": 4, "depth": 2, "beam": 3, "spins": true, "use_hold": true, "mistake": 0.04, "mistake_margin": 5.0, "clean": true,
+		"attack_weight": 8.0, "stars": [3, 2, 3]},
+	# Lv.5: Lv.4 と Lv.6 の間。Cold Clear 2 の読みで、速さは控えめ
+	5: {"pps": 1.5, "interval": 5, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
+		"cold_clear": true, "think_ticks": 6, "stars": [2, 4, 3]},
+	# Lv.6: 上級者くらいの速さ（2 PPS、1 マス 4F で動かす）
+	6: {"pps": 2.0, "interval": 4, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
+		"cold_clear": true, "think_ticks": 6, "stars": [3, 5, 4]},
+	# Lv.7: 人が出せる速さの上限（3 PPS、横移動の押しっぱなしと同じ 1 マス 2F で動かす）で、考える力は最大
+	7: {"pps": 3.0, "interval": 2, "depth": 2, "beam": 6, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
+		"cold_clear": true, "think_ticks": 3, "stars": [5, 5, 5]},
 	TAS_LEVEL: {"pps": 10.0, "interval": 0, "depth": 2, "beam": 4, "spins": true, "use_hold": true, "mistake": 0.0, "mistake_margin": 0.0,
-		"cold_clear": true, "think_ticks": 4},
+		"cold_clear": true, "think_ticks": 4, "stars": [5, 5, 5]},
 }
 const TAS_STEPS_PER_TICK := 12
 const RESTART_THINK_TICKS := 6  # Cold Clear 2 が一から考え直すとき（おじゃまのせり上がりなど）に最低限考えさせる時間

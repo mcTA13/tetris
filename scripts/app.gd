@@ -4,6 +4,8 @@ extends Node
 enum Mode { SPRINT_40L, MARATHON, ULTRA, DIG, PRACTICE }
 
 const SAVE_PATH := "user://save.json"
+const LEVEL_SCHEME := 2         # CPU の強さの番号の付け方（2: Lv.1〜7 と TAS=8）
+const OLD_LEVELS := {1: 1, 2: 2, 3: 4, 4: 6, 5: 7, 6: 8}  # 5 段階のころの番号 → 今の番号
 const MODE_KEYS := {  # Loc のキー
 	Mode.SPRINT_40L: "mode_40l", Mode.MARATHON: "mode_marathon", Mode.ULTRA: "mode_ultra",
 	Mode.DIG: "mode_dig", Mode.PRACTICE: "mode_practice",
@@ -39,11 +41,11 @@ var ren_best := 0               # REN 練習の最大 REN
 var practice := "spin_t"        # 練習の種類（Mode.PRACTICE のとき。保存しない）
 var menu_category := ""         # タイトルで開いていた大分類（保存しない）
 # CPU 対戦
-var versus_level := 3           # 1〜5、6 は隠しの TAS
+var versus_level := 4           # 1〜7（CpuPlayer.MAX_LEVEL）、8 は隠しの TAS
 var versus_first_to := 2
 var versus_records := {}        # 強さ → [勝ち, 負け]
 var demo := false               # CPU 同士のデモを見ている（保存しない）
-var demo_levels := [4, 4]       # デモの左右の CPU の強さ
+var demo_levels := [6, 6]       # デモの左右の CPU の強さ
 var settings := DEFAULT_SETTINGS.duplicate()
 var bindings := {}              # {"pad": {action: [button]}, "key": {action: [keycode]}}。空なら既定
 var skin: UiSkin
@@ -80,6 +82,20 @@ func submit_versus(level: int, won: bool) -> void:
 	record[0 if won else 1] += 1
 	versus_records[level] = record
 	save()
+
+
+## 強さの名前（"Lv.3" / "TAS"）
+static func level_name(level: int) -> String:
+	return "TAS" if level == CpuPlayer.TAS_LEVEL else "Lv.%d" % level
+
+
+## 強さの目安（例「速さ ★★★☆☆　読み ★★☆☆☆　攻撃 ★★★☆☆」）
+static func level_stars(level: int) -> String:
+	var stars: Array = CpuPlayer.CONFIG[level].stars
+	var parts := []
+	for i in 3:
+		parts.append("%s %s" % [Loc.t(["star_speed", "star_read", "star_attack"][i]), "★".repeat(stars[i]) + "☆".repeat(5 - stars[i])])
+	return "　".join(parts)
 
 
 ## [勝ち, 負け]
@@ -141,6 +157,7 @@ func save() -> void:
 		"versus_first_to": versus_first_to,
 		"versus_records": versus_records,
 		"demo_levels": demo_levels,
+		"level_scheme": LEVEL_SCHEME,
 		"settings": settings,
 		"bindings": bindings,
 	}, "\t"))
@@ -157,16 +174,19 @@ func _load() -> void:
 	ultra_best_score = int(data.get("ultra_best_score", 0))
 	dig_best = int(data.get("dig_best", 0))
 	ren_best = int(data.get("ren_best", 0))
-	versus_level = clampi(int(data.get("versus_level", 3)), 1, 5)  # 隠しの TAS は毎回コマンドで出す
+	# 強さが 5 段階だったころの保存データは、7 段階の番号に移し替える
+	var remap: Dictionary = {} if int(data.get("level_scheme", 1)) >= LEVEL_SCHEME else OLD_LEVELS
+	versus_level = clampi(remap.get(int(data.get("versus_level", 3)), int(data.get("versus_level", 3))), 1, CpuPlayer.MAX_LEVEL)  # 隠しの TAS は毎回コマンドで出す
 	versus_first_to = clampi(int(data.get("versus_first_to", 2)), 1, 3)
 	var saved_demo = data.get("demo_levels", [4, 4])
 	if saved_demo is Array and saved_demo.size() == 2:
 		# 隠しの TAS は保存しない（毎回コマンドで出す）
-		demo_levels = [clampi(int(saved_demo[0]), 1, 5), clampi(int(saved_demo[1]), 1, 5)]
+		demo_levels = [clampi(remap.get(int(saved_demo[0]), int(saved_demo[0])), 1, CpuPlayer.MAX_LEVEL),
+			clampi(remap.get(int(saved_demo[1]), int(saved_demo[1])), 1, CpuPlayer.MAX_LEVEL)]
 	var records = data.get("versus_records", {})
 	if records is Dictionary:
 		for k in records:
-			versus_records[int(k)] = [int(records[k][0]), int(records[k][1])]
+			versus_records[remap.get(int(k), int(k))] = [int(records[k][0]), int(records[k][1])]
 	var saved: Dictionary = data.get("settings", {})
 	for k in DEFAULT_SETTINGS:
 		if saved.has(k):
@@ -183,6 +203,7 @@ func _load() -> void:
 				bindings[kind][action] = saved_bindings[kind][action].map(func(v): return int(v))
 
 
+## 分:秒.1/100 秒（例 01:23.45）
 static func format_time(ticks: int) -> String:
-	var ms := ticks * 1000 / 60
-	return "%d:%02d.%03d" % [ms / 60000, (ms / 1000) % 60, ms % 1000]
+	var cs := ticks * 100 / 60
+	return "%02d:%02d.%02d" % [cs / 6000, (cs / 100) % 60, cs % 100]

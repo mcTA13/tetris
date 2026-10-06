@@ -62,7 +62,7 @@ func guide(game: GameState) -> Dictionary:
 	var step: Dictionary = _drill.steps[game.pieces_placed]
 	if step.type != game.piece or CpuBrain.rows_from(game.board) != step.rows:
 		return {}
-	return {"type": step.type, "x": step.x, "y": step.y, "rot": step.rot, "hold": false}
+	return step
 
 
 func stats() -> Array:

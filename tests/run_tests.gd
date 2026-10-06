@@ -25,6 +25,7 @@ func _init() -> void:
 	test_line_goal_finishes()
 	test_garbage_rises_on_lock()
 	test_garbage_max_per_lock()
+	test_garbage_holes_like_puyo_tetris()
 	test_attack_cancels_incoming()
 	test_attack_partially_cancelled()
 	test_garbage_top_out()
@@ -374,11 +375,42 @@ func test_garbage_rises_on_lock() -> void:
 	g.hard_drop()
 	check(_garbage_rows(g) == 3, "おじゃま: ラインを消さずに置くとせり上がる")
 	check(g.incoming_total() == 0, "おじゃま: 予告が空になる")
-	var holes := {}
+	var one_hole := true
 	for y in range(Board.HEIGHT - 3, Board.HEIGHT):
-		holes[g.board.grid[y].find(PieceData.NONE)] = true
-	check(holes.size() == 1, "おじゃま: 1回の攻撃の穴は同じ列")
+		one_hole = one_hole and g.board.grid[y].count(PieceData.NONE) == 1
+	check(one_hole, "おじゃま: どの段も穴は 1 つ")
 	check(not find_event(ev, "garbage_rise").is_empty(), "おじゃま: garbage_rise イベント")
+
+
+## 穴の列: 一緒にせり上がる段の中では 30% で変わり、せり上がりの最初の段は 90% で前と変わる
+func test_garbage_holes_like_puyo_tetris() -> void:
+	var row_changes := 0
+	var row_pairs := 0
+	var batch_changes := 0
+	var batches := 0
+	var prev := -1
+	for s in 400:
+		var g := GameState.new(1000 + s)
+		g.start()
+		g.receive(4)
+		g._raise_garbage()
+		var holes := []
+		for y in range(Board.HEIGHT - 4, Board.HEIGHT):
+			holes.append(g.board.grid[y].find(PieceData.NONE))
+		# 上から 1 段目が最初にせり上がった段
+		for i in 3:
+			row_pairs += 1
+			if holes[i + 1] != holes[i]:
+				row_changes += 1
+		g.receive(2)
+		g._raise_garbage()
+		batches += 1
+		if g.board.grid[Board.HEIGHT - 2].find(PieceData.NONE) != holes[3]:
+			batch_changes += 1
+	var row_rate := float(row_changes) / row_pairs
+	var batch_rate := float(batch_changes) / batches
+	check(absf(row_rate - 0.3) < 0.05, "おじゃま: 段の中で穴が変わる割合は約 30%% (%.2f)" % row_rate)
+	check(absf(batch_rate - 0.9) < 0.05, "おじゃま: せり上がりの切れ目で穴が変わる割合は約 90%% (%.2f)" % batch_rate)
 
 
 func test_garbage_max_per_lock() -> void:
@@ -648,7 +680,7 @@ func test_drills_are_solvable() -> void:
 	for d in SpinDrills.all():
 		var g := GameState.new(1)
 		SpinDrills.apply(d, g.board)
-		g.start_with(d.piece)
+		g.start_with_queue([d.piece])
 		var start := Vector3i(g.pos.x, g.pos.y, g.rot)
 		var sol := SpinDrills.solution(d, g.board, start)
 		check(not sol.is_empty(), "練習: %s %s に正解がある" % [d.name, d.rows[0]])

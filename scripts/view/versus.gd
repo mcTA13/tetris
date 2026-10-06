@@ -2,8 +2,7 @@ extends Node2D
 ## CPU 対戦画面。左が自分、右が CPU。App.versus_level / App.versus_first_to で設定する。
 ## App.demo が true ならデモ: 左右とも CPU（強さは App.demo_levels）で、ラウンドを終わりなく繰り返す（ボタンでタイトルへ）。
 
-const CELL := 24.0
-const PLAYER_POS := Vector2(88, 150)
+const PLAYER_POS := FieldView.PLAYER_BASE
 const CPU_POS := Vector2(710, 150)
 const READY_TICKS := 60
 const GO_TICKS := 30
@@ -46,12 +45,7 @@ var _left_cpu: CpuPlayer        # デモで左側を操作する CPU
 func _ready() -> void:
 	demo = App.demo
 	for v in [_player_view, _cpu_view]:
-		v.cell = CELL
-		v.hold_rect = Rect2(0, 0, 100, 92)
-		v.board_pos = Vector2(126, 0)
-		v.next_rect = Rect2(378, 0, 104, 330)
-		v.counter_pos = Vector2(378, 372)
-		v.message_rect = Rect2(-10, 150, 120, 0)
+		v.use_standard_layout()
 		v.show_meter = true
 		add_child(v)
 	_player_view.set_base_position(PLAYER_POS)
@@ -310,7 +304,7 @@ func _draw() -> void:
 ## side: 0 が左、1 が右（デモ以外では右の CPU だけ）
 func _cpu_name(side := 1) -> String:
 	var level: int = App.demo_levels[side] if demo else App.versus_level
-	return "CPU  TAS" if level == CpuPlayer.TAS_LEVEL else "CPU  Lv.%d" % level
+	return "CPU  " + App.level_name(level)
 
 
 func _draw_name(pos: Vector2, label: String, win_count: int) -> void:

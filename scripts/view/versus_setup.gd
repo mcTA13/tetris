@@ -1,6 +1,6 @@
 extends Node2D
 ## CPU 対戦の準備画面（強さと試合形式）。App.demo なら、デモの左右の CPU の強さを選ぶ。
-## 隠し: Lv.5 のときに LB+RB（キーボードは Q+E）を押しながら決定すると TAS が出る。
+## 隠し: いちばん強い Lv のときに LB+RB（キーボードは Q+E）を押しながら決定すると TAS が出る。
 
 const VERSUS_ROWS := ["level", "first_to", "start", "back"]
 const DEMO_ROWS := ["demo_left", "demo_right", "start", "back"]
@@ -37,7 +37,7 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("accept"):
 		# 隠し: CPU 対戦ではどの行でも、デモでは選んでいる強さの行で
 		var secret_row: String = _rows[_index] if App.demo else "level"
-		if secret_row in LEVEL_ROWS and _level(secret_row) == 5 and _secret_held():
+		if secret_row in LEVEL_ROWS and _level(secret_row) == CpuPlayer.MAX_LEVEL and _secret_held():
 			_set_level(secret_row, CpuPlayer.TAS_LEVEL)
 			_tas_flash = 1.0
 			Sfx.play("perfect")
@@ -78,7 +78,7 @@ func _change(step: int) -> void:
 	var row: String = _rows[_index]
 	if row in LEVEL_ROWS:
 		# TAS から動かしたら通常の強さに戻る
-		_set_level(row, 5 if _level(row) == CpuPlayer.TAS_LEVEL else clampi(_level(row) + step, 1, 5))
+		_set_level(row, CpuPlayer.MAX_LEVEL if _level(row) == CpuPlayer.TAS_LEVEL else clampi(_level(row) + step, 1, CpuPlayer.MAX_LEVEL))
 	elif row == "first_to":
 		App.versus_first_to = clampi(App.versus_first_to + step, 1, 3)
 	else:
@@ -89,7 +89,7 @@ func _change(step: int) -> void:
 func _back() -> void:
 	Sfx.play("menu_back")
 	if App.versus_level == CpuPlayer.TAS_LEVEL:
-		App.versus_level = 5
+		App.versus_level = CpuPlayer.MAX_LEVEL
 	App.demo = false
 	App.save()
 	get_tree().change_scene_to_file("res://scenes/title.tscn")
@@ -125,20 +125,29 @@ func _draw() -> void:
 				skin.draw_text(self, base, Loc.t("set_back"), 24, role, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
 			_:
 				var label := Loc.t("first_to") if row == "first_to" else Loc.t("cpu_level" if row == "level" else row)
-				var value := Loc.t("first_to_value") % App.versus_first_to if row == "first_to" else Loc.t("level_%d" % _level(row))
+				var value := Loc.t("first_to_value") % App.versus_first_to if row == "first_to" else App.level_name(_level(row))
 				if selected:
 					value = "◀  %s  ▶" % value
 				skin.draw_text(self, base + Vector2(32, 0), label, 24, role, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 				skin.draw_text(self, base, value, 24, role, HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x - 32, true)
 
-	# CPU 対戦では選んでいる強さの戦績
+	# 選んでいる強さの目安（星）と、CPU 対戦ではその強さの戦績
+	var lines := []
+	var row: String = _rows[_index]
+	var level := App.versus_level if not App.demo else (_level(row) if row in LEVEL_ROWS else -1)
+	if level > 0:
+		lines.append(App.level_stars(level))
 	if not App.demo:
 		var record: Array = App.versus_record(App.versus_level)
-		var text := "%s  %s" % [Loc.t("level_%d" % App.versus_level), Loc.t("record") % [record[0], record[1]]]
-		var rw: float = skin.text_width(text, 22, true) + 60
-		var rr := Rect2(640 - rw / 2, TOP + _rows.size() * GAP + 12, rw, 46)
+		lines.append("%s  %s" % [App.level_name(App.versus_level), Loc.t("record") % [record[0], record[1]]])
+	if not lines.is_empty():
+		var rw := 0.0
+		for text in lines:
+			rw = maxf(rw, skin.text_width(text, 22, true) + 60)
+		var rr := Rect2(640 - rw / 2, TOP + _rows.size() * GAP + 12, rw, 14 + lines.size() * 34)
 		skin.draw_panel(self, rr)
-		skin.draw_text(self, Vector2(rr.position.x, rr.position.y + 32), text, 22, "highlight", HORIZONTAL_ALIGNMENT_CENTER, rw, true)
+		for i in lines.size():
+			skin.draw_text(self, Vector2(rr.position.x, rr.position.y + 32 + i * 34), lines[i], 22, "highlight", HORIZONTAL_ALIGNMENT_CENTER, rw, true)
 
 	if _tas_flash > 0.0:
 		skin.draw_popup(self, Vector2(640, 380), ["TAS"], 1.4 - _tas_flash * 1.4, 1.4, 2.0)

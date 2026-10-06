@@ -7,6 +7,7 @@ var _drills: Array
 var _index := 0
 var _random := false
 var _rng := RandomNumberGenerator.new()
+var _solution := {}             # 今の課題の正解（盤面を作ったときに一度だけ探す）
 
 
 func _init(kind: String) -> void:
@@ -30,10 +31,11 @@ func drill() -> Dictionary:
 
 func setup(game: GameState) -> void:
 	SpinDrills.apply(drill(), game.board)
+	_solution = SpinDrills.solution(drill(), game.board, GameState.spawn_start(drill().piece))
 
 
 func start(game: GameState) -> void:
-	game.start_with(drill().piece)
+	game.start_with_queue([drill().piece])
 
 
 func allow_hold() -> bool:
@@ -41,14 +43,13 @@ func allow_hold() -> bool:
 
 
 ## 置いたマスが正解の置き場所と同じなら成功
-func judge(kind: String, data: Dictionary, game: GameState) -> String:
+func judge(kind: String, data: Dictionary, _game: GameState) -> String:
 	if kind != "lock":
 		return ""
-	var sol := _solution(game)
-	if sol.is_empty():
+	if _solution.is_empty():
 		return _result(false)
 	var placed := SpinDrills.cells_at(data.piece, data.rot, data.pos)
-	return _result(placed == SpinDrills.cells_at(data.piece, sol.rot, Vector2i(sol.x, sol.y)))
+	return _result(placed == SpinDrills.cells_at(data.piece, _solution.rot, Vector2i(_solution.x, _solution.y)))
 
 
 func advance(success: bool) -> void:
@@ -62,22 +63,12 @@ func advance(success: bool) -> void:
 		_index = (_index + 1) % _drills.size()
 
 
-func guide(game: GameState) -> Dictionary:
-	if not show_hint:
+func guide(_game: GameState) -> Dictionary:
+	if not show_hint or _solution.is_empty():
 		return {}
-	var sol := SpinDrills.solution(drill(), game.board, Vector3i(game.pos.x, game.pos.y, game.rot))
-	if sol.is_empty():
-		return {}
-	return {"type": drill().piece, "x": sol.x, "y": sol.y, "rot": sol.rot, "hold": false}
+	return {"type": drill().piece, "x": _solution.x, "y": _solution.y, "rot": _solution.rot}
 
 
 func stats() -> Array:
 	var side := Loc.t("practice_left") if drill().side == "left" else Loc.t("practice_right")
 	return [[Loc.t("practice_drill"), "%s %s" % [drill().name, side]]] + super.stats()
-
-
-## 置く前の盤面での正解（置いたあとの盤面ではミノが入ってしまっているので、ミノを除いて探す）
-func _solution(_game: GameState) -> Dictionary:
-	var board := Board.new()
-	SpinDrills.apply(drill(), board)
-	return SpinDrills.solution(drill(), board, Vector3i(GameState.SPAWN_POS.x, GameState.SPAWN_POS.y, 0))

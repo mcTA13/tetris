@@ -6,7 +6,6 @@ class_name PcDrills
 const ROWS := 4
 const PIECES := 10
 const MAX_NODES := 2000         # 1 回の探索で調べる局面の上限（超えたら別の順番でやり直す）
-const FULL := (1 << Board.WIDTH) - 1
 
 
 ## remaining: 自分で置くミノの数。戻り値:
@@ -18,17 +17,8 @@ static func generate(rng: RandomNumberGenerator, remaining: int) -> Dictionary:
 		var region := PackedInt32Array()
 		region.resize(ROWS)
 		if _search(region, 0, PieceData.ALL.duplicate(), steps, rng, nodes):
-			var seq := steps.map(func(s: Dictionary) -> int: return s.type)
-			return _build(seq, steps, PIECES - remaining)
+			return _build(steps, PIECES - remaining)
 	return {}
-
-
-static func _shuffle(a: Array, rng: RandomNumberGenerator) -> void:
-	for i in range(a.size() - 1, 0, -1):
-		var j := rng.randi_range(0, i)
-		var tmp = a[i]
-		a[i] = a[j]
-		a[j] = tmp
 
 
 ## region: まだ消えていない段（上から順）。ここに収まる置き方だけを探す。bag: 今の 1 巡でまだ出ていないミノ
@@ -40,21 +30,22 @@ static func _search(region: PackedInt32Array, i: int, bag: Array, steps: Array,
 	if nodes[0] > MAX_NODES:
 		return false
 	var types := bag.duplicate()
-	_shuffle(types, rng)
+	Bag.shuffle(types, rng)
 	for type in types:
 		var rest: Array = bag.duplicate()
 		rest.erase(type)
 		if rest.is_empty():
 			rest = PieceData.ALL.duplicate()  # 次の 1 巡
 		var moves := _drops(region, type)
-		_shuffle(moves, rng)
+		Bag.shuffle(moves, rng)
 		for m in moves:
 			var next := _place(region, type, m.rot, m.x, m.y)
 			if not _fillable(next):
 				continue
-			# 盤面全体での位置（region の一番上の段は、盤面の下から region.size() 段目）
+			# 盤面全体での位置（region の一番上の段は、盤面の下から region.size() 段目）。
+			# 置く前の盤面は、見つかった手順だけ _build で盤面全体の形に直す
 			var top := Board.HEIGHT - region.size()
-			steps.append({"type": type, "x": m.x, "y": top + m.y, "rot": m.rot, "rows": _to_board_rows(region)})
+			steps.append({"type": type, "x": m.x, "y": top + m.y, "rot": m.rot, "rows": region})
 			if _search(next, i + 1, rest, steps, rng, nodes):
 				return true
 			steps.pop_back()
@@ -79,7 +70,10 @@ static func _drops(region: PackedInt32Array, type: int) -> Array:
 				inside = inside and y + c.y >= 0
 			if not inside:
 				continue
-			var key := str(SpinDrills.cells_at(type, rot, Vector2i(x, y)))
+			# 同じマスを占めるかどうかを、マスのビット（region の大きさは 4×10 まで）で比べる
+			var key := 0
+			for c in cells:
+				key |= 1 << ((y + c.y) * Board.WIDTH + x + c.x)
 			if seen.has(key):
 				continue
 			seen[key] = true
@@ -105,7 +99,7 @@ static func _place(region: PackedInt32Array, type: int, rot: int, x: int, y: int
 		out[y + c.y] |= 1 << (x + c.x)
 	var kept := PackedInt32Array()
 	for r in out:
-		if r != FULL:
+		if r != CpuBrain.FULL:
 			kept.append(r)
 	return kept
 
@@ -114,7 +108,7 @@ static func _place(region: PackedInt32Array, type: int, rot: int, x: int, y: int
 static func _fillable(region: PackedInt32Array) -> bool:
 	var covered := 0
 	for r in region:
-		if (~r) & covered & FULL:
+		if (~r) & covered & CpuBrain.FULL:
 			return false
 		covered |= r
 	var seen := {}
@@ -151,7 +145,9 @@ static func _to_board_rows(region: PackedInt32Array) -> PackedInt32Array:
 
 
 ## 最初の given 個を置いた盤面（ミノの色付き）と、残りの手順
-static func _build(seq: Array, steps: Array, given: int) -> Dictionary:
+static func _build(steps: Array, given: int) -> Dictionary:
+	for s in steps:
+		s.rows = _to_board_rows(s.rows)
 	var board := Board.new()
 	for i in given:
 		var s: Dictionary = steps[i]
@@ -159,4 +155,5 @@ static func _build(seq: Array, steps: Array, given: int) -> Dictionary:
 		var full := board.full_rows()
 		if not full.is_empty():
 			board.remove_rows(full)
-	return {"board": board, "queue": seq.slice(given), "steps": steps.slice(given)}
+	var rest := steps.slice(given)
+	return {"board": board, "queue": rest.map(func(s: Dictionary) -> int: return s.type), "steps": rest}

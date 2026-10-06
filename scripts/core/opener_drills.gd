@@ -95,20 +95,18 @@ const LETTERS := {"I": PieceData.I, "O": PieceData.O, "T": PieceData.T, "S": Pie
 	"Z": PieceData.Z, "J": PieceData.J, "L": PieceData.L}
 
 
-## 置く手順を作る。戻り値 {"steps": [{"type", "cells"（並べ替えたマス）, "x", "y", "rot", "stage", "tspin"}...], "queue": [ミノ...]}。
+## 置く手順を作る。戻り値 {"steps": [{"type", "cells"（並べ替えたマス）, "x", "y", "rot", "tspin"}...], "queue": [ミノ...]}。
 ## 置き方が見つからなければ空
 static func build(id: String, rng: RandomNumberGenerator) -> Dictionary:
 	var rows := PackedInt32Array()
 	rows.resize(Board.HEIGHT)
 	var steps := []
 	var stages: Array = OPENERS[id]
-	for i in stages.size():
-		var stage = stages[i]
+	for stage in stages:
 		if stage is Dictionary:
 			var t := _tspin(rows, stage.tspin)
 			if t.is_empty():
 				return {}
-			t["stage"] = i
 			steps.append(t)
 			rows = CpuBrain.place(rows, PieceData.T, t.rot, t.x, t.y)[0]
 			continue
@@ -117,7 +115,6 @@ static func build(id: String, rng: RandomNumberGenerator) -> Dictionary:
 		if not _order(rows, pieces, order, rng):
 			return {}
 		for p in order:
-			p["stage"] = i
 			p["tspin"] = 0
 			steps.append(p)
 			rows = CpuBrain.place(rows, p.type, p.rot, p.x, p.y)[0]
@@ -187,7 +184,7 @@ static func _order(rows: PackedInt32Array, pieces: Array, order: Array, rng: Ran
 
 ## そのマスにぴったり置ける置き場所（出現位置から行けるもの）
 static func _find(rows: PackedInt32Array, type: int, cells: Array, hard_drop_only := false) -> Dictionary:
-	for p in CpuBrain.find_placements(rows, type, _spawn(type), hard_drop_only):
+	for p in CpuBrain.find_placements(rows, type, GameState.spawn_start(type), hard_drop_only):
 		if SpinDrills.cells_at(type, p.rot, Vector2i(p.x, p.y)) == cells:
 			return p
 	return {}
@@ -195,12 +192,8 @@ static func _find(rows: PackedInt32Array, type: int, cells: Array, hard_drop_onl
 
 ## lines 段消せる Tスピンの置き場所
 static func _tspin(rows: PackedInt32Array, lines: int) -> Dictionary:
-	for p in CpuBrain.find_placements(rows, PieceData.T, _spawn(PieceData.T)):
+	for p in CpuBrain.find_placements(rows, PieceData.T, GameState.spawn_start(PieceData.T)):
 		if p.spin == GameState.Spin.FULL and CpuBrain.place(rows, PieceData.T, p.rot, p.x, p.y)[1] == lines:
 			return {"type": PieceData.T, "cells": SpinDrills.cells_at(PieceData.T, p.rot, Vector2i(p.x, p.y)),
 				"x": p.x, "y": p.y, "rot": p.rot, "tspin": lines}
 	return {}
-
-
-static func _spawn(type: int) -> Vector3i:
-	return Vector3i(GameState.SPAWN_POS.x + (1 if type == PieceData.O else 0), GameState.SPAWN_POS.y, 0)

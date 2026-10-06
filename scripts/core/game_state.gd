@@ -27,7 +27,9 @@ const MINI_ATTACK := [0, 0, 1]
 const COMBO_ATTACK := [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5]
 const PERFECT_CLEAR_ATTACK := 10
 const MAX_GARBAGE_PER_LOCK := 8     # 1回にせり上がる最大行数（残りは持ち越し）
-const GARBAGE_HOLE_CHANGE := 0.7    # 次の攻撃で穴の列が変わる確率
+# おじゃまの穴の列（ぷよぷよテトリスと同じ決まり）
+const GARBAGE_ROW_CHANGE := 0.3     # 一緒にせり上がる段の中で、上の段と穴の列が変わる確率
+const GARBAGE_BATCH_CHANGE := 0.9   # せり上がりの最初の段が、前に受けたおじゃまと穴の列が変わる確率
 
 # 設定（フレーム単位）
 var are_frames := 0
@@ -35,7 +37,7 @@ var line_clear_frames := 18
 var soft_drop_factor := 20.0
 var fixed_level := 0            # 0 以外なら落下速度をこのレベルで固定（40ライン用）
 var line_goal := 0              # 0 以外ならこのライン数でクリア
-var allow_hold := true          # false ならホールドできない（Tスピン練習）
+var allow_hold := true          # false ならホールドできない（スピン練習）
 
 var board := Board.new()
 var bag: Bag
@@ -61,7 +63,7 @@ var _pending_rows: Array[int] = []
 var _buffered_rotation := 0
 var _buffered_hold := false
 
-# 対戦: 届いた攻撃の予告。[{"lines": int, "hole": int}, ...] 先に届いたものから順に
+# 対戦: 届いた攻撃の予告。[{"lines": int}, ...] 先に届いたものから順に（穴の列はせり上がるときに決める）
 var incoming: Array[Dictionary] = []
 var _garbage_rng := RandomNumberGenerator.new()
 var _last_hole := -1
@@ -88,15 +90,15 @@ func start() -> void:
 	_spawn(bag.pop())
 
 
-## 最初のミノを決めて始める（スピン練習）
-func start_with(type: int) -> void:
-	_spawn(type)
-
-
-## 最初の何個かのミノの順番を決めて始める（パフェ練習・開幕テンプレ練習）。その後はふつうの 7 種 1 巡
+## 最初の何個かのミノの順番を決めて始める（練習）。その後はふつうの 7 種 1 巡
 func start_with_queue(pieces: Array) -> void:
 	bag.push_front(pieces)
 	start()
+
+
+## ミノが出てくる位置と向き（x, y, 向き）。出た直後に 1 段下がる前の位置
+static func spawn_start(type: int) -> Vector3i:
+	return Vector3i(SPAWN_POS.x + (1 if type == PieceData.O else 0), SPAWN_POS.y, 0)
 
 
 ## 時間切れなどで終わらせる（ウルトラ）
@@ -132,17 +134,11 @@ func clear_progress() -> float:
 
 # ---------------- 対戦 ----------------
 
-## 相手からの攻撃を予告に積む。穴の列は攻撃ごとに決める
+## 相手からの攻撃を予告に積む
 func receive(lines_count: int) -> void:
 	if lines_count <= 0:
 		return
-	var hole := _last_hole
-	if hole < 0 or _garbage_rng.randf() < GARBAGE_HOLE_CHANGE:
-		hole = _garbage_rng.randi_range(0, Board.WIDTH - 1)
-		if hole == _last_hole:
-			hole = (hole + _garbage_rng.randi_range(1, Board.WIDTH - 1)) % Board.WIDTH
-	_last_hole = hole
-	incoming.append({"lines": lines_count, "hole": hole})
+	incoming.append({"lines": lines_count})
 	event.emit("garbage_incoming", {"total": incoming_total()})
 
 
@@ -171,15 +167,27 @@ func _raise_garbage() -> bool:
 	var overflow := false
 	while budget > 0 and not incoming.is_empty():
 		var n := mini(budget, incoming[0].lines)
-		overflow = board.add_garbage(n, incoming[0].hole) or overflow
+		for _i in n:
+			# 最初の段は前のおじゃまと、2 段目からは上の段と比べて、穴の列を変えるか決める
+			var change := GARBAGE_BATCH_CHANGE if raised == 0 else GARBAGE_ROW_CHANGE
+			if _last_hole < 0 or _garbage_rng.randf() < change:
+				_last_hole = _next_hole(_last_hole)
+			overflow = board.add_garbage(1, _last_hole) or overflow
+			raised += 1
 		budget -= n
-		raised += n
 		incoming[0].lines -= n
 		if incoming[0].lines == 0:
 			incoming.pop_front()
 	if raised > 0:
 		event.emit("garbage_rise", {"lines": raised, "total": incoming_total()})
 	return overflow
+
+
+## 今と違う穴の列（最初は好きな列）
+func _next_hole(current: int) -> int:
+	if current < 0:
+		return _garbage_rng.randi_range(0, Board.WIDTH - 1)
+	return (current + _garbage_rng.randi_range(1, Board.WIDTH - 1)) % Board.WIDTH
 
 
 ## 操作できない間（消去待ち・出現待ち）に押された回転・ホールドを覚えておく（IRS/IHS）
@@ -354,9 +362,8 @@ func _update_lowest() -> void:
 func _spawn(type: int, from_hold := false) -> void:
 	piece = type
 	rot = 0
-	pos = SPAWN_POS
-	if type == PieceData.O:
-		pos.x += 1
+	var start := spawn_start(type)
+	pos = Vector2i(start.x, start.y)
 	_gravity_acc = 0.0
 	_lock_timer = 0
 	_lock_resets = 0

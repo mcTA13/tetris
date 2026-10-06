@@ -24,7 +24,12 @@ func allow_hold() -> bool:
 	return true
 
 
-## ゲームのイベントごとの判定。課題の結果が出たら "success" / "fail" を返す
+## ゲームのイベントごとに必ず呼ばれる（盤面の積み足しや記録など、判定以外のこと）
+func on_event(_kind: String, _data: Dictionary, _game: GameState) -> void:
+	pass
+
+
+## 課題の判定。結果が出たら "success" / "fail" を返す（結果が出るまでのイベントだけ呼ばれる）
 func judge(_kind: String, _data: Dictionary, _game: GameState) -> String:
 	return ""
 
@@ -34,14 +39,9 @@ func advance(success: bool) -> void:
 	show_hint = not success
 
 
-## ガイドで見せる置き場所 {"type", "x", "y", "rot", "hold"}。なければ空
+## ガイドで見せる置き場所 {"type", "x", "y", "rot"}。なければ空
 func guide(_game: GameState) -> Dictionary:
 	return {}
-
-
-## 毎 tick 呼ばれる（REN 練習のせり上げなど）
-func update(_game: GameState) -> void:
-	pass
 
 
 ## 情報パネルの [見出し, 値] の並び
