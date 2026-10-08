@@ -51,13 +51,14 @@ func draw_item(ci: CanvasItem, rect: Rect2, selected: bool, _time: float) -> voi
 		_box(colors.accent, Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(ci.get_canvas_item(), rect)
 
 
-func draw_board(ci: CanvasItem, rect: Rect2, cell: float) -> void:
-	draw_panel(ci, rect.grow(border), "board")
+## top_extra: 盤面の上に足して見せる高さ（出てきたミノの下の部分を見せるため）。マス目はそこまで縦の線だけ伸ばす
+func draw_board(ci: CanvasItem, rect: Rect2, cell: float, top_extra := 0.0) -> void:
+	draw_panel(ci, rect.grow_individual(border, border + top_extra, border, border), "board")
 	var grid_width := 3.0
 	var cols := int(rect.size.x / cell)
 	var rows := int(rect.size.y / cell)
 	for x in range(1, cols):
-		ci.draw_line(rect.position + Vector2(x * cell, 0), rect.position + Vector2(x * cell, rect.size.y), colors.grid, grid_width)
+		ci.draw_line(rect.position + Vector2(x * cell, -top_extra), rect.position + Vector2(x * cell, rect.size.y), colors.grid, grid_width)
 	for y in range(1, rows):
 		ci.draw_line(rect.position + Vector2(0, y * cell), rect.position + Vector2(rect.size.x, y * cell), colors.grid, grid_width)
 

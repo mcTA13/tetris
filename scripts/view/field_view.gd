@@ -5,7 +5,8 @@ extends Node2D
 ## is_player が true なら操作音と振動も出す（CPU 側は消去の音だけ小さめに）。
 
 const LOCK_FLASH_TIME := 0.15
-const SHOW_HIDDEN_ROWS := 0     # 盤面の上にはみ出して見せる行数（出てきたミノのはみ出した部分は見せない）
+const SHOW_HIDDEN_ROWS := 0     # 盤面の上にはみ出して丸ごと見せる行数（はみ出したミノは見せない）
+const PEEK_ROWS := 0.3          # 盤面の上に足して見せる高さ（マス）。出てきたミノの、盤面の上の行の下の部分だけが見える
 const MESSAGE_TIME := 1.5
 const SPIN_NAMES := ["", "MINI ", ""]
 const LINE_NAMES := ["", "SINGLE", "DOUBLE", "TRIPLE", "TETRIS"]
@@ -92,6 +93,19 @@ func meter_global_point() -> Vector2:
 
 func board_global_center() -> Vector2:
 	return _base_position + board_rect().get_center()
+
+
+# 盤面の上に足した部分。_peek_clip（その高さの枠で切り取る）の中で、_peek に盤面の上の行を描く
+var _peek_clip := Control.new()
+var _peek := Node2D.new()
+
+
+func _ready() -> void:
+	_peek_clip.clip_contents = true
+	_peek_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_peek_clip)
+	_peek_clip.add_child(_peek)
+	_peek.draw.connect(_draw_peek)
 
 
 func _process(delta: float) -> void:
@@ -246,7 +260,8 @@ func _draw() -> void:
 	var skin: UiSkin = App.skin
 	var board_origin := board_pos + fx.board_offset()
 	var rect := Rect2(board_origin, Vector2(Board.WIDTH, Board.VISIBLE_ROWS) * cell)
-	skin.draw_board(self, rect, cell)
+	skin.draw_board(self, rect, cell, PEEK_ROWS * cell)
+	_update_peek(rect)
 	fx.draw_trails(self, skin)
 
 	# 固定済みブロック（消える行は縮みながら消える）
@@ -370,6 +385,29 @@ func _draw_message() -> void:
 func _cell_rect(c: Vector2i) -> Rect2:
 	var row := c.y - Board.HIDDEN_ROWS
 	return Rect2(board_pos + fx.board_offset() + Vector2(c.x, row) * cell, Vector2(cell, cell))
+
+
+## 盤面の上に足した部分の切り取り範囲を合わせて描き直す
+func _update_peek(board: Rect2) -> void:
+	_peek_clip.position = board.position - Vector2(0, PEEK_ROWS * cell)
+	_peek_clip.size = Vector2(board.size.x, PEEK_ROWS * cell)
+	_peek.position = -_peek_clip.position  # 中では FieldView と同じ座標で描く
+	_peek.queue_redraw()
+
+
+## 盤面のすぐ上の行（固定済みのブロックと操作中のミノ）。切り取られて下の部分だけが見える
+func _draw_peek() -> void:
+	if game == null:
+		return
+	var row := Board.HIDDEN_ROWS - SHOW_HIDDEN_ROWS - 1
+	for x in Board.WIDTH:
+		var v: int = game.board.grid[row][x]
+		if v != PieceData.NONE:
+			App.skin.draw_cell(_peek, _cell_rect(Vector2i(x, row)), v)
+	if game.can_control():
+		for c in PieceData.cells(game.piece, game.rot):
+			if game.pos.y + c.y == row:
+				App.skin.draw_cell(_peek, _cell_rect(game.pos + c), game.piece)
 
 
 func _draw_board_cell(c: Vector2i, type: int, style := UiSkin.CellStyle.NORMAL, flash := 0.0) -> void:

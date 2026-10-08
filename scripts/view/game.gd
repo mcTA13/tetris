@@ -345,8 +345,10 @@ func _draw_overlay() -> void:
 	if game.is_finished():
 		_draw_result(center)
 	elif paused:
+		# ポーズのメニューは画面の真ん中に出す（盤面は左に寄っているので、盤面の真ん中にすると左に寄る）
+		_overlay.draw_rect(Rect2(0, 0, 1280, 720), Color(0, 0, 0, 0.55))  # 後ろを暗くして、メニューを読みやすくする
 		var labels := PAUSE_ITEMS.map(func(k): return Loc.t(k))
-		skin.draw_menu_panel(_overlay, center, Loc.t("pause"), labels, _pause_index, _time)
+		skin.draw_menu_panel(_overlay, Vector2(640, 360), Loc.t("pause"), labels, _pause_index, _time)
 	elif _countdown > 0:
 		draw_banner(_overlay, center, [Loc.t("ready")])
 	elif _go_timer > 0 and game.pieces_placed == 0:  # 置き始めたら消す（大技の文字とかぶらないように）
@@ -362,7 +364,22 @@ func _info_rows() -> Array:
 	var mode_name := Loc.t(App.MODE_KEYS[App.mode])
 	if App.mode == App.Mode.PRACTICE:
 		mode_name = Loc.t("mode_" + App.practice)
-	return [[Loc.t("mode"), mode_name]] + _mode_rows() + [[Loc.t("time"), App.format_time(game.ticks)]]
+	var best := _best_row()
+	return [[Loc.t("mode"), mode_name]] + _mode_rows() + ([best] if not best.is_empty() else []) + [[Loc.t("time"), App.format_time(game.ticks)]]
+
+
+## 自己ベストの行（記録のあるモードだけ）
+func _best_row() -> Array:
+	match App.mode:
+		App.Mode.SPRINT_40L:
+			return [Loc.t("best"), "--:--.--" if App.best_40l_ticks == 0 else App.format_time(App.best_40l_ticks)]
+		App.Mode.MARATHON:
+			return [Loc.t("high_score"), str(App.marathon_best_score)]
+		App.Mode.ULTRA:
+			return [Loc.t("high_score"), str(App.ultra_best_score)]
+		App.Mode.DIG:
+			return [Loc.t("best"), str(App.dig_best)]
+	return []
 
 
 func _mode_rows() -> Array:

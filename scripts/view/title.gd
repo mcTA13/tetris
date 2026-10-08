@@ -326,7 +326,7 @@ func _draw_preview(skin: UiSkin) -> void:
 		skin.draw_text(self, Vector2(left, PANEL.end.y - 40), record, 24, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	# デモ盤面の見出し
 	# 出現したミノは盤面の上に 2 段はみ出すので、そのさらに上に置く
-	skin.draw_text(self, Vector2(DEMO_POS.x, DEMO_POS.y - FieldView.SHOW_HIDDEN_ROWS * DEMO_CELL - 10), "DEMO  CPU Lv.%d" % DEMO_LEVEL, 15, "text_dim",
+	skin.draw_text(self, Vector2(DEMO_POS.x, DEMO_POS.y - (FieldView.SHOW_HIDDEN_ROWS + FieldView.PEEK_ROWS) * DEMO_CELL - 10), "DEMO  CPU Lv.%d" % DEMO_LEVEL, 15, "text_dim",
 		HORIZONTAL_ALIGNMENT_CENTER, Board.WIDTH * DEMO_CELL, true)
 
 
@@ -399,7 +399,7 @@ func _draw_wrapped(skin: UiSkin, text: String, pos: Vector2, width: float, size:
 func _record_text(item: String) -> String:
 	match item:
 		"40l":
-			var best := "--:--.---" if App.best_40l_ticks == 0 else App.format_time(App.best_40l_ticks)
+			var best := "--:--.--" if App.best_40l_ticks == 0 else App.format_time(App.best_40l_ticks)
 			return "%s  %s" % [Loc.t("best"), best]
 		"marathon":
 			return "%s  %d" % [Loc.t("high_score"), App.marathon_best_score]
