@@ -1,5 +1,5 @@
 extends Node
-## 対戦画面の確認用: 準備画面、対戦中、ラウンド決着、試合結果のスクリーンショット
+## 対戦画面の確認用: 準備画面、対戦中、一時停止、ラウンド決着、試合結果のスクリーンショット
 ## 実行: godot --path . tests/versus_shot.tscn -- <出力フォルダ>
 
 func _ready() -> void:
@@ -37,6 +37,11 @@ func _ready() -> void:
 			await get_tree().process_frame
 	await _frames(3)
 	_save(out_dir + "/vs_play.png")
+
+	scene.paused = true
+	await _frames(3)
+	_save(out_dir + "/vs_pause.png")
+	scene.paused = false
 
 	scene.player._game_over("test")
 	scene._physics_process(1.0 / 60.0)

@@ -356,6 +356,7 @@ func _draw_overlay() -> void:
 		State.MATCH_END:
 			_draw_match_result()
 	if paused:
+		_overlay.draw_rect(Rect2(0, 0, 1280, 720), Color(0, 0, 0, 0.55))  # 後ろを暗くして、メニューを読みやすくする
 		var labels := PAUSE_ITEMS.map(func(k): return Loc.t(k))
 		skin.draw_menu_panel(_overlay, Vector2(640, 380), Loc.t("pause"), labels, _menu_index, _time)
 
