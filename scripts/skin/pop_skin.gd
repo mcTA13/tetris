@@ -224,6 +224,10 @@ static func _back_out(x: float) -> float:
 
 ## ポップ: 丸い三角波とサイン波で、ぷよっとした音とキラキラしたアルペジオ
 func build_sounds() -> Dictionary:
+	var rotate := Synth.mix([
+		[0.0, _click(9000, 0.35, 0.014, 220)],
+		[0.0, Synth.tone(3200, 0.01, "triangle", 0.14, 300)],
+		[0.012, _click(6000, 0.18, 0.016, 200)]])
 	return {
 		# 操作音はすべて短いクリックでそろえる（音程を滑らせない）
 		# カチャ: ごく短く小さいクリック（DAS で連続して鳴るので控えめに）
@@ -231,10 +235,11 @@ func build_sounds() -> Dictionary:
 			[0.0, _click(12000, 0.18, 0.008, 380)],
 			[0.008, _click(9000, 0.05, 0.008, 380)]]),
 		# カチッ: 移動より短く明るい
-		"rotate": Synth.mix([
-			[0.0, _click(9000, 0.35, 0.014, 220)],
-			[0.0, Synth.tone(3200, 0.01, "triangle", 0.14, 300)],
-			[0.012, _click(6000, 0.18, 0.016, 200)]]),
+		"rotate": rotate,
+		# カカッ: Tスピンの形に入った回転。回転音を大きくして、8ms 遅れで4半音下げたものを重ねる
+		"tspin_rotate": _gain(Synth.mix([
+			[0.0, rotate],
+			[0.008, Synth.pitched(rotate, -4)]]), 1.5),
 		# シャカッ: こすれる「シャ」からクリック
 		"hold": Synth.mix([
 			[0.0, _click(5000, 0.14, 0.05, 45)],
@@ -312,6 +317,12 @@ func build_sounds() -> Dictionary:
 
 
 ## 短いノイズのクリック。freq が高いほど硬く明るい
+func _gain(samples: PackedFloat32Array, gain: float) -> PackedFloat32Array:
+	for i in samples.size():
+		samples[i] *= gain
+	return samples
+
+
 func _click(freq: float, volume: float, duration: float, decay := 180.0) -> PackedFloat32Array:
 	return Synth.tone(freq, duration, "noise", volume, decay)
 

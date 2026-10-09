@@ -67,6 +67,16 @@ static func arpeggio(notes: Array, gap: float, duration: float, wave := "triangl
 	return mix(parts)
 
 
+## 再生速度を変えて音程を上げ下げする（semitones 半音。上げると短くなる）
+static func pitched(samples: PackedFloat32Array, semitones: float) -> PackedFloat32Array:
+	var rate := pow(2.0, semitones / 12.0)
+	var out := PackedFloat32Array()
+	out.resize(int(samples.size() / rate))
+	for i in out.size():
+		out[i] = samples[mini(int(i * rate), samples.size() - 1)]
+	return out
+
+
 static func to_stream(samples: PackedFloat32Array) -> AudioStreamWAV:
 	var data := PackedByteArray()
 	data.resize(samples.size() * 2)

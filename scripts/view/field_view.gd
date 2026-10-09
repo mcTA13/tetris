@@ -10,8 +10,6 @@ const PEEK_ROWS := 0.3          # 盤面の上に足して見せる高さ（マ�
 const MESSAGE_TIME := 1.5
 const SPIN_NAMES := ["", "MINI ", ""]
 const LINE_NAMES := ["", "SINGLE", "DOUBLE", "TRIPLE", "TETRIS"]
-const TSPIN_PITCH := 1.26       # Tスピンの形に入ったら回転音を約4半音上げる
-const TSPIN_MINI_PITCH := 1.12  # Mini は約2半音
 const CPU_VOLUME := 0.5
 
 var game: GameState
@@ -128,10 +126,10 @@ func _on_game_event(kind: String, data: Dictionary) -> void:
 		"move":
 			_player_sound("move")
 		"rotate":
-			var pitch := 1.0
 			if game.piece == PieceData.T and data.spin != GameState.Spin.NONE:
-				pitch = TSPIN_PITCH if data.spin == GameState.Spin.FULL else TSPIN_MINI_PITCH
-			_player_sound("rotate", pitch)
+				_player_sound("tspin_rotate")
+			else:
+				_player_sound("rotate")
 		"hold":
 			_player_sound("hold")
 		"hard_drop":
