@@ -13,7 +13,8 @@ const MODE_KEYS := {  # Loc のキー
 const ASSIST_MODES := ["off", "free", "six_three"]
 const SOFT_DROP_INSTANT := 0    # soft_drop がこの値なら即座に一番下まで
 # 見た目の一覧。テイストを増やすときはここに追加する
-const SKINS := {"pop": preload("res://scripts/skin/pop_skin.gd"), "classic": preload("res://scripts/skin/classic_skin.gd")}
+const SKINS := {"pop": preload("res://scripts/skin/pop_skin.gd"), "classic": preload("res://scripts/skin/classic_skin.gd"),
+	"neon": preload("res://scripts/skin/neon_skin.gd")}
 
 const DEFAULT_SETTINGS := {
 	"das": 10,

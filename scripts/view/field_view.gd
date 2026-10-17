@@ -134,7 +134,7 @@ func _on_game_event(kind: String, data: Dictionary) -> void:
 			_player_sound("hold")
 		"hard_drop":
 			_hard_drop_trail(data)
-			fx.bump(skin_fx.hard_drop_bump * cell / 30.0)
+			_hard_drop_sparks(data, skin_fx.hard_drop_sparks)
 			_player_sound("hard_drop")
 			if is_player:
 				InputSetup.vibrate(0.3, 0.0, 0.05)
@@ -231,6 +231,19 @@ func _hard_drop_trail(data: Dictionary) -> void:
 		fx.trail(Rect2(top_rect.position, bottom_rect.end - top_rect.position), App.skin.piece_colors[data.piece])
 
 
+## ハードドロップの着地点から火花を飛ばす（各列のいちばん下のマスから）
+func _hard_drop_sparks(data: Dictionary, count: int) -> void:
+	if count <= 0 or data.distance <= 0:
+		return
+	var bottoms := {}
+	for c in PieceData.cells(data.piece, data.rot):
+		var p: Vector2i = data.pos + c
+		bottoms[p.x] = maxi(bottoms.get(p.x, p.y), p.y)
+	for x in bottoms:
+		var r := _cell_rect(Vector2i(x, bottoms[x]))
+		fx.burst(Vector2(r.get_center().x, r.end.y), App.skin.piece_colors[data.piece], count, App.skin.fx.particle_speed * 0.5 * cell / 30.0)
+
+
 static func clear_name(data: Dictionary) -> String:
 	var parts := []
 	if data.b2b > 0:
@@ -256,7 +269,7 @@ func _draw() -> void:
 	if game == null:
 		return
 	var skin: UiSkin = App.skin
-	var board_origin := board_pos + fx.board_offset()
+	var board_origin := board_pos
 	var rect := Rect2(board_origin, Vector2(Board.WIDTH, Board.VISIBLE_ROWS) * cell)
 	skin.draw_board(self, rect, cell, PEEK_ROWS * cell)
 	_update_peek(rect)
@@ -382,7 +395,7 @@ func _draw_message() -> void:
 
 func _cell_rect(c: Vector2i) -> Rect2:
 	var row := c.y - Board.HIDDEN_ROWS
-	return Rect2(board_pos + fx.board_offset() + Vector2(c.x, row) * cell, Vector2(cell, cell))
+	return Rect2(board_pos + Vector2(c.x, row) * cell, Vector2(cell, cell))
 
 
 ## 盤面の上に足した部分の切り取り範囲を合わせて描き直す

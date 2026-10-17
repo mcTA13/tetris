@@ -13,7 +13,6 @@ var _popups := []
 var _trails := []
 var _shake := 0.0
 var _shake_time := 0.0
-var _bump := 0.0
 var _flash := 0.0
 var _bounce := {}               # カウンター名 → 残り時間
 var _rng := RandomNumberGenerator.new()
@@ -49,10 +48,6 @@ func shake(amount: float) -> void:
 	_shake = maxf(_shake, amount)
 
 
-func bump(amount: float) -> void:
-	_bump = maxf(_bump, amount)
-
-
 func flash(alpha: float) -> void:
 	_flash = maxf(_flash, alpha)
 
@@ -71,7 +66,6 @@ func clear() -> void:
 	_popups.clear()
 	_trails.clear()
 	_shake = 0.0
-	_bump = 0.0
 	_flash = 0.0
 	_bounce.clear()
 
@@ -92,7 +86,6 @@ func update(delta: float, gravity: float) -> void:
 	_trails = _trails.filter(func(tr): return tr.t < TRAIL_DURATION)
 	_shake = move_toward(_shake, 0.0, delta * 60.0)
 	_shake_time += delta
-	_bump = move_toward(_bump, 0.0, delta * 40.0)
 	_flash = move_toward(_flash, 0.0, delta * 0.35 / FLASH_DURATION)
 	for k in _bounce.keys():
 		_bounce[k] = maxf(_bounce[k] - delta, 0.0)
@@ -103,11 +96,6 @@ func screen_offset() -> Vector2:
 	if _shake <= 0.0:
 		return Vector2.ZERO
 	return Vector2(sin(_shake_time * 71.0), cos(_shake_time * 53.0)) * _shake
-
-
-## 盤面だけのずれ（ハードドロップで沈む）
-func board_offset() -> Vector2:
-	return Vector2(0, _bump)
 
 
 func draw_trails(ci: CanvasItem, skin: UiSkin) -> void:

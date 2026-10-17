@@ -115,7 +115,7 @@ var fx := {
 	"shake_tetris": 10.0,        # 画面の揺れ（ピクセル）
 	"shake_spin": 8.0,
 	"shake_perfect": 16.0,
-	"hard_drop_bump": 6.0,       # ハードドロップで盤面が沈む量
+	"hard_drop_sparks": 0,       # ハードドロップの着地で、ミノの下のマス1つあたりに飛ばす粒の数
 	"flash_alpha": 0.35,         # 大技のときの画面フラッシュ
 }
 
