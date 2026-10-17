@@ -42,6 +42,7 @@ func _init() -> void:
 	test_hold_can_be_disabled()
 	test_finish_ends_game()
 	test_cold_clear_suggests_tspin_double()
+	test_menu_cursor()
 	print("\n%d checks, %d failed" % [_count, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -798,3 +799,30 @@ func test_finish_ends_game() -> void:
 	var ev := capture(g)
 	g.finish()
 	check(g.phase == GameState.Phase.CLEARED and not find_event(ev, "finished").is_empty(), "時間切れで終わらせられる")
+
+
+## メニューのカーソル: 最初は目標にそのまま置き、そのあとはばねで近づいて止まる
+func test_menu_cursor() -> void:
+	var motion := {"stiffness": 700.0, "damping": 1.0}
+	var a := Rect2(100, 100, 300, 50)
+	var b := Rect2(100, 300, 300, 40)
+	var cursor := MenuCursor.new()
+	cursor.update(5.0, a, motion)
+	check(cursor.rect == a, "menu cursor: first update places it on the target")
+	cursor.update(5.0 + 1.0 / 60.0, b, motion)
+	check(cursor.rect.position.y > a.position.y and cursor.rect.position.y < b.position.y, "menu cursor: slides toward the new target")
+	var t := 5.0 + 1.0 / 60.0
+	var max_y := 0.0
+	for i in 60:
+		t += 1.0 / 60.0
+		cursor.update(t, b, motion)
+		max_y = maxf(max_y, cursor.rect.position.y)
+	check(cursor.rect.position.distance_to(b.position) < 0.5 and absf(cursor.rect.size.y - b.size.y) < 0.5, "menu cursor: settles on the target")
+	check(max_y <= b.position.y + 0.5, "menu cursor: damping 1 does not overshoot")
+	check(cursor.rest > 0.0, "menu cursor: rest counts up after stopping")
+	check(cursor.coverage(b) > 0.99 and cursor.coverage(a) == 0.0, "menu cursor: coverage")
+	cursor.update(t + 1.0 / 60.0, a, {"stiffness": 0.0})
+	check(cursor.rect == a, "menu cursor: stiffness 0 moves instantly")
+	cursor.reset()
+	cursor.update(t + 2.0 / 60.0, b, motion)
+	check(cursor.rect == b, "menu cursor: reset places it on the next target")

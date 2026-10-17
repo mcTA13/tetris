@@ -29,6 +29,7 @@ func _init() -> void:
 	fx.particle_speed = 480.0
 	fx.shake_tetris = 12.0
 	fx.shake_perfect = 18.0
+	cursor_motion = {"stiffness": 700.0, "damping": 1.0}  # 行き過ぎずに減速して止まる
 
 
 func display_name() -> String:
@@ -50,12 +51,9 @@ func draw_background(ci: CanvasItem, size: Vector2, time: float) -> void:
 		row += 1
 
 
-func draw_item(ci: CanvasItem, rect: Rect2, selected: bool, time: float) -> void:
-	if not selected:
-		return
-	# 選択中はピンクのピルが少し弾む
-	var bounce := 1.0 + 0.03 * sin(time * 8.0)
-	var r := Rect2(rect.get_center() - rect.size * bounce / 2.0, rect.size * bounce)
+func draw_cursor(ci: CanvasItem, cursor: MenuCursor, _time: float) -> void:
+	# ピンクのピル（形は変えずに、そのまま滑って移る）
+	var r := cursor.rect
 	_box(colors.accent, NAVY, 3, int(r.size.y / 2.0), Color(NAVY, 0.3)).draw(ci.get_canvas_item(), r)
 
 

@@ -28,6 +28,7 @@ func _init() -> void:
 	font_heavy = load("res://assets/fonts/MPLUS1p-ExtraBold.ttf")
 	radius = 6
 	border = 2
+	cursor_motion = {"stiffness": 700.0, "damping": 1.0}  # 行き過ぎずに減速して止まる
 	# 星の位置は固定の乱数で決める（毎回同じ夜空）
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 99
@@ -55,12 +56,18 @@ func draw_background(ci: CanvasItem, size: Vector2, time: float) -> void:
 		ci.draw_circle(Vector2(x, s.pos.y), s.size, Color(0.85, 0.9, 1.0, a))
 
 
-func draw_item(ci: CanvasItem, rect: Rect2, selected: bool, time: float) -> void:
-	if not selected:
-		return
-	# 選択中は青く光る板（ゆっくり明滅）
+func draw_cursor(ci: CanvasItem, cursor: MenuCursor, time: float) -> void:
+	var rid := ci.get_canvas_item()
+	# 動いている間は、通ったあとに薄い光の尾を残す
+	if cursor.velocity.length() > 40.0:
+		for age in [0.02, 0.045, 0.07, 0.095, 0.12]:
+			var past := cursor.trail_at(age)
+			if past.position.distance_to(cursor.rect.position) < 2.0:
+				continue
+			_box(Color(colors.accent, 0.26 * (1.0 - age / 0.13)), Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(rid, past)
+	# 青く光る板（ゆっくり明滅）
 	var glow := 0.15 + 0.1 * sin(time * 5.0)
-	_box(Color(colors.accent, 0.85), Color(0.75, 0.88, 1.0, 0.9), 2, radius, Color(colors.accent, glow + 0.2)).draw(ci.get_canvas_item(), rect)
+	_box(Color(colors.accent, 0.85), Color(0.75, 0.88, 1.0, 0.9), 2, radius, Color(colors.accent, glow + 0.2)).draw(rid, cursor.rect)
 
 
 # ---------------- ブロック ----------------

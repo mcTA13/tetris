@@ -41,6 +41,7 @@ func _init() -> void:
 	fx.shake_perfect = 28.0
 	fx.hard_drop_sparks = 4
 	fx.flash_alpha = 0.6
+	cursor_motion = {"stiffness": 2600.0, "damping": 1.0}  # 行き過ぎずに素早く移る
 	# 星と光の粒の位置は固定の乱数で決める
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2077
@@ -94,13 +95,13 @@ func draw_background(ci: CanvasItem, size: Vector2, time: float) -> void:
 
 
 ## パネル: 左上と右下の角を斜めに落とした計器風の枠。残りの 2 つの角には明るいかぎ括弧
-func draw_panel(ci: CanvasItem, rect: Rect2, fill_role := "panel") -> void:
+func draw_panel(ci: CanvasItem, rect: Rect2, fill_role := "panel", alpha := 1.0) -> void:
 	var cut := clampf(minf(rect.size.x, rect.size.y) * 0.25, 6.0, 16.0)
 	var shape := _chamfer(rect, cut)
-	ci.draw_colored_polygon(shape, colors[fill_role])
-	_neon_outline(ci, shape, Color(CYAN, 0.45), 1.5, 0.6)
+	ci.draw_colored_polygon(shape, _fade(colors[fill_role], alpha))
+	_neon_outline(ci, shape, Color(CYAN, 0.45 * alpha), 1.5, 0.6 * alpha, CYAN)
 	var arm := minf(18.0, minf(rect.size.x, rect.size.y) * 0.3)
-	var bright := CYAN.lightened(0.4)
+	var bright := _fade(CYAN.lightened(0.4), alpha)
 	ci.draw_polyline(PackedVector2Array([Vector2(rect.end.x - arm, rect.position.y), Vector2(rect.end.x, rect.position.y), Vector2(rect.end.x, rect.position.y + arm)]), bright, 3.0)
 	ci.draw_polyline(PackedVector2Array([Vector2(rect.position.x, rect.end.y - arm), Vector2(rect.position.x, rect.end.y), Vector2(rect.position.x + arm, rect.end.y)]), bright, 3.0)
 
@@ -137,23 +138,44 @@ func draw_board(ci: CanvasItem, rect: Rect2, cell: float, top_extra := 0.0) -> v
 	ci.draw_polyline(PackedVector2Array([Vector2(right + 6, floor_y - arm), Vector2(right + 6, floor_y + 6), Vector2(right - arm, floor_y + 6)]), Color(MAGENTA, 0.9), 2.0)
 
 
-## 選んでいる項目: 右に傾いた平行四辺形がマゼンタに光り、光の筋が流れる
-func draw_item(ci: CanvasItem, rect: Rect2, selected: bool, time: float) -> void:
-	if not selected:
-		return
+## 選んでいる項目: 右に傾いた平行四辺形がマゼンタに光り、光の筋が流れる。
+## 素早く移り、通ったあとにマゼンタとシアンの残像が左右にずれて残る
+func draw_cursor(ci: CanvasItem, cursor: MenuCursor, time: float) -> void:
+	var rect := cursor.rect
+	for age in [0.03, 0.06, 0.09, 0.12]:
+		var past := cursor.trail_at(age)
+		if absf(past.position.y - rect.position.y) < 3.0 and absf(past.position.x - rect.position.x) < 3.0:
+			continue
+		var a: float = 0.55 * (1.0 - age / 0.14)
+		_outline(ci, _slanted(Rect2(past.position + Vector2(5, 0), past.size)), Color(MAGENTA, a), 2.0)
+		_outline(ci, _slanted(Rect2(past.position - Vector2(5, 0), past.size)), Color(CYAN, a), 2.0)
 	var slant := minf(14.0, rect.size.y * 0.35)
 	var p := rect.position
 	var e := rect.end
-	var shape := PackedVector2Array([Vector2(p.x + slant, p.y), Vector2(e.x, p.y), Vector2(e.x - slant, e.y), Vector2(p.x, e.y)])
+	var shape := _slanted(rect)
 	var pulse := 0.75 + 0.25 * sin(time * 5.0)
 	ci.draw_colored_polygon(shape, Color(MAGENTA, 0.82))
 	_neon_outline(ci, shape, Color(1.0, 0.78, 0.95), 2.0, 1.6 * pulse, MAGENTA)
-	# 左から右へ流れる光の筋（辺と同じ傾きなので形からはみ出さない）
+	# 左から右へ流れる光の筋（辺と同じ傾きなので形からはみ出さない）。止まってから流れ直す
 	var span := rect.size.x - slant - 12.0
-	if span > 0.0:
-		var x := p.x + 6.0 + fmod(time * 320.0, span + 260.0)
+	if span > 0.0 and cursor.rest > 0.0:
+		var x := p.x + 6.0 + fmod(cursor.rest * 320.0, span + 260.0)
 		if x <= p.x + 6.0 + span:
 			ci.draw_line(Vector2(x + slant, p.y + 1), Vector2(x, e.y - 1), Color(1, 1, 1, 0.22), 8.0)
+
+
+## 右に傾いた平行四辺形
+static func _slanted(rect: Rect2) -> PackedVector2Array:
+	var slant := minf(14.0, rect.size.y * 0.35)
+	var p := rect.position
+	var e := rect.end
+	return PackedVector2Array([Vector2(p.x + slant, p.y), Vector2(e.x, p.y), Vector2(e.x - slant, e.y), Vector2(p.x, e.y)])
+
+
+static func _outline(ci: CanvasItem, shape: PackedVector2Array, color: Color, width: float) -> void:
+	var closed := shape.duplicate()
+	closed.append(shape[0])
+	ci.draw_polyline(closed, color, width)
 
 
 # ---------------- ブロック ----------------

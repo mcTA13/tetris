@@ -41,14 +41,33 @@ func draw_background(ci: CanvasItem, size: Vector2, _time: float) -> void:
 		PackedColorArray([colors.bg_top, colors.bg_top, colors.bg_bottom, colors.bg_bottom]))
 
 
-func draw_panel(ci: CanvasItem, rect: Rect2, fill_role := "panel") -> void:
-	_box(colors[fill_role], colors.panel_border, border, radius, colors.shadow).draw(ci.get_canvas_item(), rect)
+## alpha: 全体の濃さ（カーソルが重なった項目のパネルを薄くするのに使う）
+func draw_panel(ci: CanvasItem, rect: Rect2, fill_role := "panel", alpha := 1.0) -> void:
+	_box(_fade(colors[fill_role], alpha), _fade(colors.panel_border, alpha), border, radius, _fade(colors.shadow, alpha)).draw(ci.get_canvas_item(), rect)
 
 
-## メニューの1項目の背景
-func draw_item(ci: CanvasItem, rect: Rect2, selected: bool, _time: float) -> void:
-	if selected:
-		_box(colors.accent, Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(ci.get_canvas_item(), rect)
+# ---------------- メニューのカーソル ----------------
+
+## カーソルの動き方（MenuCursor.update に渡す）。stiffness 0 は一瞬で移る
+var cursor_motion := {"stiffness": 0.0, "damping": 1.0}
+
+
+## 選んでいる項目を示すカーソル。cursor.rect の位置に描く
+func draw_cursor(ci: CanvasItem, cursor: MenuCursor, _time: float) -> void:
+	_box(colors.accent, Color.TRANSPARENT, 0, radius, Color.TRANSPARENT).draw(ci.get_canvas_item(), cursor.rect)
+
+
+## メニューの1項目のパネル。カーソルが重なっている分だけ薄くする（選んでいる項目の裏に残らないように）
+func draw_item_panel(ci: CanvasItem, rect: Rect2, cursor: MenuCursor) -> void:
+	var alpha := 1.0 - cursor.coverage(rect)
+	if alpha > 0.01:
+		draw_panel(ci, rect, "panel", alpha)
+
+
+## メニューの項目の文字の色。カーソルが重なっている分だけ text_on_accent に近づける。
+## base: 重なっていないときの色の役割
+func item_text_color(rect: Rect2, cursor: MenuCursor, base := "text") -> Color:
+	return (colors[base] as Color).lerp(colors.text_on_accent, cursor.coverage(rect))
 
 
 ## top_extra: 盤面の上に足して見せる高さ（出てきたミノの下の部分を見せるため）。マス目はそこまで縦の線だけ伸ばす
@@ -164,7 +183,7 @@ func draw_attack_orb(ci: CanvasItem, pos: Vector2, lines: int, _t: float) -> voi
 
 
 ## 上下で選ぶメニュー（ポーズなど）。labels は表示する文字、index は選択中
-func draw_menu_panel(ci: CanvasItem, center: Vector2, title: String, labels: Array, index: int, time: float) -> void:
+func draw_menu_panel(ci: CanvasItem, center: Vector2, title: String, labels: Array, index: int, cursor: MenuCursor, time: float) -> void:
 	var item := Vector2(260, 52)
 	var gap := item.y + 14
 	var w := 340.0
@@ -172,14 +191,17 @@ func draw_menu_panel(ci: CanvasItem, center: Vector2, title: String, labels: Arr
 	var panel := Rect2(center.x - w / 2, center.y - h / 2, w, h)
 	draw_panel(ci, panel)
 	draw_text(ci, Vector2(panel.position.x, panel.position.y + 54), title, 40, "highlight", HORIZONTAL_ALIGNMENT_CENTER, w, true)
+	var rects := []
 	for i in labels.size():
-		var selected := i == index
-		var rect := Rect2(Vector2(center.x - item.x / 2, panel.position.y + 80 + i * gap), item)
-		if not selected:
-			draw_panel(ci, rect)
-		draw_item(ci, rect, selected, time)
+		rects.append(Rect2(Vector2(center.x - item.x / 2, panel.position.y + 80 + i * gap), item))
+	cursor.update(time, rects[index], cursor_motion)
+	for rect in rects:
+		draw_item_panel(ci, rect, cursor)
+	draw_cursor(ci, cursor, time)
+	for i in labels.size():
+		var rect: Rect2 = rects[i]
 		draw_text(ci, Vector2(rect.position.x, rect.position.y + 36), labels[i], 26,
-			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
+			item_text_color(rect, cursor), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
 
 
 ## アシストのおすすめの置き場所。segments はミノの外周の線分（2 点ずつ）、type はミノの種類、pulse: 0〜1
@@ -233,6 +255,10 @@ func build_sounds() -> Dictionary:
 
 
 # ---------------- 内部 ----------------
+
+static func _fade(color: Color, alpha: float) -> Color:
+	return Color(color, color.a * alpha)
+
 
 func _box(fill: Color, border_color: Color, border_width: int, corner: int, shadow: Color) -> StyleBoxFlat:
 	var key := [fill, border_color, border_width, corner, shadow]

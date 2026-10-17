@@ -12,6 +12,7 @@ const GAP := 76
 var _rows: Array = VERSUS_ROWS
 var _index := 0
 var _time := 0.0
+var _cursor := MenuCursor.new()
 var _tas_flash := 0.0
 
 
@@ -104,19 +105,24 @@ func _secret_held() -> bool:
 	return false
 
 
+func _row_rect(i: int) -> Rect2:
+	return Rect2(Vector2(640 - ITEM_SIZE.x / 2, TOP + i * GAP), ITEM_SIZE)
+
+
 func _draw() -> void:
 	var skin: UiSkin = App.skin
 	skin.draw_background(self, Vector2(1280, 720), _time)
 	skin.draw_text(self, Vector2(0, 110), Loc.t("mode_demo" if App.demo else "versus_setup"), 56, "title", HORIZONTAL_ALIGNMENT_CENTER, 1280, true, 14)
 
+	_cursor.update(_time, _row_rect(_index), skin.cursor_motion)
+	for i in _rows.size():
+		skin.draw_item_panel(self, _row_rect(i), _cursor)
+	skin.draw_cursor(self, _cursor, _time)
 	for i in _rows.size():
 		var row: String = _rows[i]
 		var selected := i == _index
-		var rect := Rect2(Vector2(640 - ITEM_SIZE.x / 2, TOP + i * GAP), ITEM_SIZE)
-		if not selected:
-			skin.draw_panel(self, rect)
-		skin.draw_item(self, rect, selected, _time)
-		var role := "text_on_accent" if selected else "text"
+		var rect := _row_rect(i)
+		var role := skin.item_text_color(rect, _cursor)
 		var base := Vector2(rect.position.x, rect.position.y + 41)
 		match row:
 			"start":

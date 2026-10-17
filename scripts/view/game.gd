@@ -28,6 +28,7 @@ var _go_timer := 0
 var _new_record := false
 var _last_level := 1
 var _time := 0.0
+var _pause_cursor := MenuCursor.new()
 var _field := FieldView.new()
 var _overlay := Node2D.new()    # 盤面より手前に描くもの（バナー・ポーズ）
 var _assist: ColdClearBot       # 40ラインのアシスト（使わないときは null）
@@ -163,6 +164,7 @@ func _physics_process(delta: float) -> void:
 	if pressed.get("pause", false):
 		paused = true
 		_pause_index = 0
+		_pause_cursor.reset()
 		InputSetup.menu_direction(0.0)  # 押しっぱなしの十字キーで選択が動かないようにする
 		Sfx.play("menu_select")
 		return
@@ -348,7 +350,7 @@ func _draw_overlay() -> void:
 		# ポーズのメニューは画面の真ん中に出す（盤面は左に寄っているので、盤面の真ん中にすると左に寄る）
 		_overlay.draw_rect(Rect2(0, 0, 1280, 720), Color(0, 0, 0, 0.55))  # 後ろを暗くして、メニューを読みやすくする
 		var labels := PAUSE_ITEMS.map(func(k): return Loc.t(k))
-		skin.draw_menu_panel(_overlay, Vector2(640, 360), Loc.t("pause"), labels, _pause_index, _time)
+		skin.draw_menu_panel(_overlay, Vector2(640, 360), Loc.t("pause"), labels, _pause_index, _pause_cursor, _time)
 	elif _countdown > 0:
 		draw_banner(_overlay, center, [Loc.t("ready")])
 	elif _go_timer > 0 and game.pieces_placed == 0:  # 置き始めたら消す（大技の文字とかぶらないように）

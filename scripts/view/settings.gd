@@ -28,6 +28,7 @@ var _waiting := 0.0             # 割り当て待ちの残り秒数
 var _ignore_accept := false     # 割り当て直後、決定ボタンを離すまで無視する
 var _shoulders := [false, false]  # 前のフレームの LB / RB（Q / E）
 var _time := 0.0
+var _cursor := MenuCursor.new()
 
 
 func _rows() -> Array:
@@ -269,19 +270,23 @@ func _draw() -> void:
 	var skin: UiSkin = App.skin
 	skin.draw_background(self, Vector2(1280, 720), _time)
 	skin.draw_text(self, Vector2(0, 76), Loc.t("settings"), 44, "title", HORIZONTAL_ALIGNMENT_CENTER, 1280, true, 12)
-	_draw_tabs(skin)
-	skin.draw_panel(self, PANEL)
-
 	var rows := _rows()
 	var top := PANEL.position.y + 16
 	if _remap:
-		skin.draw_text(self, Vector2(PANEL.position.x + 40, top + 22), Loc.t("set_pad"), 20, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 		top += ROW_H
+	_cursor.update(_time, _tab_rect(_tab) if _index < 0 else _row_rect(top, _index), skin.cursor_motion)
+	for i in TABS.size():
+		skin.draw_item_panel(self, _tab_rect(i), _cursor)
+	skin.draw_panel(self, PANEL)
+	skin.draw_cursor(self, _cursor, _time)
+	_draw_tabs(skin)
+
+	if _remap:
+		skin.draw_text(self, Vector2(PANEL.position.x + 40, top - ROW_H + 22), Loc.t("set_pad"), 20, "highlight", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 	for i in rows.size():
-		var rect := Rect2(PANEL.position.x + 16, top + i * ROW_H, PANEL.size.x - 32, ROW_H - 4)
+		var rect := _row_rect(top, i)
 		var selected := i == _index
-		skin.draw_item(self, rect, selected, _time)
-		var role := "text_on_accent" if selected else "text"
+		var role := skin.item_text_color(rect, _cursor)
 		var base := Vector2(rect.position.x + 24, rect.position.y + 24)
 		skin.draw_text(self, base, _label(rows[i]), 19, role, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
 		var value := _value(rows[i])
@@ -299,15 +304,20 @@ func _draw() -> void:
 	skin.draw_text(self, Vector2(0, 700), hint, 17, "text", HORIZONTAL_ALIGNMENT_CENTER, 1280)
 
 
-func _draw_tabs(skin: UiSkin) -> void:
+func _row_rect(top: float, i: int) -> Rect2:
+	return Rect2(PANEL.position.x + 16, top + i * ROW_H, PANEL.size.x - 32, ROW_H - 4)
+
+
+func _tab_rect(i: int) -> Rect2:
 	var w := PANEL.size.x / TABS.size()
+	return Rect2(PANEL.position.x + i * w + 3, TAB_Y, w - 6, 40)
+
+
+## タブの文字（パネルとカーソルは _draw で先に描く）
+func _draw_tabs(skin: UiSkin) -> void:
 	for i in TABS.size():
-		var rect := Rect2(PANEL.position.x + i * w + 3, TAB_Y, w - 6, 40)
-		var current := i == _tab
-		skin.draw_panel(self, rect)
-		if current and _index < 0:
-			skin.draw_item(self, rect, true, _time)
-		var role := "text_on_accent" if current and _index < 0 else ("highlight" if current else "text_dim")
+		var rect := _tab_rect(i)
+		var role := skin.item_text_color(rect, _cursor, "highlight" if i == _tab else "text_dim")
 		skin.draw_text(self, Vector2(rect.position.x, rect.position.y + 28), Loc.t(TABS[i].key), 17, role, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, true)
 	# タブを切り替えるボタン
 	skin.draw_text(self, Vector2(PANEL.position.x - 70, TAB_Y + 28), _shoulder_label(0), 16, "text_dim", HORIZONTAL_ALIGNMENT_RIGHT, 60, true)

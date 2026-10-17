@@ -31,6 +31,8 @@ var _round_ticks := 0
 var _round_winner := -1         # 0: 自分, 1: CPU, 2: 引き分け
 var _menu_index := 0
 var _time := 0.0
+var _pause_cursor := MenuCursor.new()
+var _end_cursor := MenuCursor.new()
 var _orbs := []                 # 攻撃の玉 {from, to, t, lines}
 var _overlay_fx := Effects.new()
 var _player_view := FieldView.new()
@@ -124,6 +126,7 @@ func _physics_process(delta: float) -> void:
 	if pressed.get("pause", false) and state != State.ROUND_END:
 		paused = true
 		_menu_index = 0
+		_pause_cursor.reset()
 		InputSetup.menu_direction(0.0)
 		Sfx.play("menu_select")
 		return
@@ -226,6 +229,7 @@ func _next_round() -> void:
 	if wins[0] >= App.versus_first_to or wins[1] >= App.versus_first_to:
 		state = State.MATCH_END
 		_menu_index = 0
+		_end_cursor.reset()
 		InputSetup.menu_direction(0.0)
 		if not _record_saved:
 			_record_saved = true
@@ -358,7 +362,7 @@ func _draw_overlay() -> void:
 	if paused:
 		_overlay.draw_rect(Rect2(0, 0, 1280, 720), Color(0, 0, 0, 0.55))  # 後ろを暗くして、メニューを読みやすくする
 		var labels := PAUSE_ITEMS.map(func(k): return Loc.t(k))
-		skin.draw_menu_panel(_overlay, Vector2(640, 380), Loc.t("pause"), labels, _menu_index, _time)
+		skin.draw_menu_panel(_overlay, Vector2(640, 380), Loc.t("pause"), labels, _menu_index, _pause_cursor, _time)
 
 
 func _small_banner(center: Vector2, text: String) -> void:
@@ -394,11 +398,14 @@ func _draw_match_result() -> void:
 			var minutes := maxf(t[2] / 3600.0, 1.0 / 60.0)
 			var value: String = ["%.1f" % (t[1] / minutes), "%.2f" % (t[0] / (minutes * 60.0)), str(t[1])][row]
 			skin.draw_text(_overlay, Vector2(cols[side + 1] - 70, y), value, 20, "text", HORIZONTAL_ALIGNMENT_CENTER, 140, true)
+	var items := []
 	for i in END_ITEMS.size():
-		var selected := i == _menu_index
-		var item := Rect2(rect.get_center().x - 130, rect.position.y + 330 + i * 66, 260, 52)
-		if not selected:
-			skin.draw_panel(_overlay, item)
-		skin.draw_item(_overlay, item, selected, _time)
+		items.append(Rect2(rect.get_center().x - 130, rect.position.y + 330 + i * 66, 260, 52))
+	_end_cursor.update(_time, items[_menu_index], skin.cursor_motion)
+	for item in items:
+		skin.draw_item_panel(_overlay, item, _end_cursor)
+	skin.draw_cursor(_overlay, _end_cursor, _time)
+	for i in END_ITEMS.size():
+		var item: Rect2 = items[i]
 		skin.draw_text(_overlay, Vector2(item.position.x, item.position.y + 36), Loc.t(END_ITEMS[i]), 26,
-			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_CENTER, item.size.x, true)
+			skin.item_text_color(item, _end_cursor), HORIZONTAL_ALIGNMENT_CENTER, item.size.x, true)

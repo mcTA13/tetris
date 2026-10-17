@@ -34,6 +34,9 @@ const DEMO_LEVEL := 6
 const NOTE_SIZE := 17
 const NOTE_LINE_H := NOTE_SIZE * 1.6
 const BOTTOM_SIZE := 20         # アップデートのパネルの一番下の行（案内・進み具合）
+const OPEN_SECONDS := 0.22      # 大分類・中分類の中身が開く・閉じる時間
+const ITEM_DELAY := 0.035       # 開くとき、項目が 1 つ下ごとに遅れて出てくる秒数（多いときは開き終わりに間に合うよう縮める）
+const ITEM_FADE := 0.14         # 項目 1 つが出てくる時間
 
 var _categories: Array = CATEGORIES.duplicate()
 var _cat := 0                   # カーソルのある大分類
@@ -43,6 +46,9 @@ var _update_open := false       # アップデートを決定して、リリー�
 var _note_scroll := 0           # リリースノートの何行目から見せるか
 var _note_rows := []            # 折り返したリリースノート [文字列, 色の役割]（最初に描くときに作る）
 var _time := 0.0
+var _open := {}                 # 大分類ごとの開き具合 {番号: 0〜1}（時間に比例して変わる）
+var _sub_open := {}             # 中分類ごとの開き具合 {"大分類:項目": 0〜1}
+var _cursor := MenuCursor.new()
 var _demo_view := FieldView.new()
 var _demo_game: GameState
 var _demo_cpu: CpuPlayer
@@ -65,6 +71,7 @@ func _ready() -> void:
 					if _is_current(subs[k]):
 						_item = j
 						_sub = k
+	_step_open(OPEN_SECONDS)  # 戻ってきたときは、開いていたメニューを開いたまま見せる
 	App.demo = false
 
 	_demo_view.cell = DEMO_CELL
@@ -131,6 +138,7 @@ func _physics_process(_delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_step_open(delta)
 	queue_redraw()
 	_demo_view.visible = _categories[_cat].key != "menu_update"  # アップデートはパネルを広く使う
 	if Updater.downloading:
@@ -153,6 +161,18 @@ func _process(delta: float) -> void:
 		_select()
 	elif Input.is_action_just_pressed("back") and _item >= 0:
 		_back()
+
+
+## 開き具合を、開いているもの（カーソルのある大分類・中分類）は 1 へ、ほかは 0 へ近づける
+func _step_open(delta: float) -> void:
+	var step := delta / OPEN_SECONDS
+	for i in _categories.size():
+		_open[i] = move_toward(_open.get(i, 0.0), 1.0 if i == _cat and _item >= 0 else 0.0, step)
+		var items: Array = _categories[i].items
+		for j in items.size():
+			if SUB_ITEMS.has(items[j]):
+				var key := "%d:%d" % [i, j]
+				_sub_open[key] = move_toward(_sub_open.get(key, 0.0), 1.0 if i == _cat and j == _item and _sub >= 0 else 0.0, step)
 
 
 ## リリースノートを見ている間: 上下でスクロール、決定でアップデート、戻るでやめる
@@ -255,47 +275,92 @@ func _draw() -> void:
 
 ## 左のメニュー。大分類は決定するまで閉じたまま、開いている大分類だけ中身を見せる
 func _draw_menu(skin: UiSkin) -> void:
+	var rows := _menu_rows()
+	for row in rows:
+		if row.selected:
+			_cursor.update(_time, row.rect, skin.cursor_motion)
+	for row in rows:
+		if row.panel:
+			skin.draw_item_panel(self, row.rect, _cursor)
+	skin.draw_cursor(self, _cursor, _time)
+	for row in rows:
+		var color := skin.item_text_color(row.rect, _cursor)
+		color.a *= row.alpha
+		if color.a > 0.01:
+			skin.draw_text(self, row.rect.position + row.text_pos, row.label, row.size, color, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+
+
+## メニューの各行 {rect, label, size, text_pos, alpha, selected, panel}。
+## 開いている途中の中身は、開き具合に合わせて縦に縮め、項目は上から順に少し遅れて下りてくる
+func _menu_rows() -> Array:
+	var rows := []
 	var y := MENU_TOP
 	for i in _categories.size():
 		var c: Dictionary = _categories[i]
-		var rect := Rect2(MENU_X, y, MENU_W, CAT_H - 8)
-		var selected := i == _cat and _item < 0
-		var open := i == _cat and _item >= 0
-		if not selected:
-			skin.draw_panel(self, rect)
-		skin.draw_item(self, rect, selected, _time)
 		var mark := ""
 		if i == _cat and not c.items.is_empty():
-			mark = "▼ " if open else "▶ "
-		skin.draw_text(self, Vector2(rect.position.x + 24, rect.position.y + 36), mark + Loc.t(c.key), 26,
-			"text_on_accent" if selected else "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
+			mark = "▼ " if _item >= 0 else "▶ "
+		rows.append(_row(Rect2(MENU_X, y, MENU_W, CAT_H - 8), mark + Loc.t(c.key), 26, Vector2(24, 36), 1.0, i == _cat and _item < 0, true))
 		y += CAT_H
-		if not open:
+		var open: float = _open.get(i, 0.0)
+		if open <= 0.0:
 			continue
-		for j in c.items.size():
-			# 中分類を開いている間は、ほかの項目を隠す（メニューが画面からはみ出さないように）
-			if _sub >= 0 and j != _item:
+		var amount := _ease(open)
+		var items: Array = c.items
+		var sub_amounts := []
+		for j in items.size():
+			sub_amounts.append(_ease(_sub_open.get("%d:%d" % [i, j], 0.0)))
+		# 中分類を開いている間は、ほかの項目を縮めて隠す（メニューが画面からはみ出さないように）
+		var shown := []
+		var total := 6.0  # 開ききったときの中身の高さ
+		for j in items.size():
+			var hidden := 0.0
+			for k in items.size():
+				if k != j:
+					hidden = maxf(hidden, sub_amounts[k])
+			shown.append(1.0 - hidden)
+			total += ITEM_H * shown[j] + SUB_H * SUB_ITEMS.get(items[j], []).size() * sub_amounts[j]
+		var top := y
+		var inner := 0.0  # 開ききったときの、中身の上からの位置
+		for j in items.size():
+			# 開いた分に収まらない項目は薄くする（下の大分類に重ならないように）
+			var fit := clampf((total - inner) * amount / ITEM_H, 0.0, 1.0)
+			var label := _label(items[j])
+			if SUB_ITEMS.has(items[j]):
+				label = ("▼ " if i == _cat and j == _item and _sub >= 0 else "▶ ") + label
+			var item_rect := Rect2(MENU_X + 36, top + inner * amount, MENU_W - 36, ITEM_H - 6)
+			rows.append(_row(item_rect, label, 22, Vector2(22, 29), shown[j] * shown[j] * fit * fit * _appear(open, j, items.size()),
+				i == _cat and j == _item and _sub < 0, false))
+			inner += ITEM_H * shown[j]
+			var subs: Array = SUB_ITEMS.get(items[j], [])
+			var sub_open: float = _sub_open.get("%d:%d" % [i, j], 0.0)
+			if subs.is_empty() or sub_open <= 0.0:
 				continue
-			var item_rect := Rect2(MENU_X + 36, y, MENU_W - 36, ITEM_H - 6)
-			var item_selected: bool = j == _item and _sub < 0
-			skin.draw_item(self, item_rect, item_selected, _time)
-			var role := "text_on_accent" if item_selected else "text"
-			var label := _label(c.items[j])
-			if SUB_ITEMS.has(c.items[j]):
-				label = ("▼ " if _sub >= 0 else "▶ ") + label
-			skin.draw_text(self, Vector2(item_rect.position.x + 22, item_rect.position.y + 29), label, 22,
-				role, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
-			y += ITEM_H
-			if _sub < 0 or j != _item:
-				continue
-			var subs := _subs()
 			for k in subs.size():
-				var sub_rect := Rect2(MENU_X + 36 + SUB_INDENT, y, MENU_W - 36 - SUB_INDENT, SUB_H - 6)
-				skin.draw_item(self, sub_rect, k == _sub, _time)
-				skin.draw_text(self, Vector2(sub_rect.position.x + 20, sub_rect.position.y + 24), _label(subs[k]), 20,
-					"text_on_accent" if k == _sub else "text", HORIZONTAL_ALIGNMENT_LEFT, -1, true)
-				y += SUB_H
-		y += 6
+				var sub_inner: float = inner + k * SUB_H * sub_amounts[j]
+				var sub_fit := clampf(minf((subs.size() - k) * SUB_H * sub_amounts[j], (total - sub_inner) * amount) / SUB_H, 0.0, 1.0)
+				var sub_rect := Rect2(MENU_X + 36 + SUB_INDENT, top + sub_inner * amount, MENU_W - 36 - SUB_INDENT, SUB_H - 6)
+				rows.append(_row(sub_rect, _label(subs[k]), 20, Vector2(20, 24), sub_fit * sub_fit * _appear(sub_open, k, subs.size()),
+					i == _cat and j == _item and k == _sub, false))
+			inner += SUB_H * subs.size() * sub_amounts[j]
+		y = top + total * amount
+	return rows
+
+
+static func _row(rect: Rect2, label: String, size: int, text_pos: Vector2, alpha: float, selected: bool, panel: bool) -> Dictionary:
+	return {"rect": rect, "label": label, "size": size, "text_pos": text_pos, "alpha": alpha, "selected": selected, "panel": panel}
+
+
+## 開き具合 open（0〜1）のとき、count 個のうち上から index 番目の項目がどれだけ出ているか（0〜1）
+static func _appear(open: float, index: int, count: int) -> float:
+	var delay := minf(ITEM_DELAY, (OPEN_SECONDS - ITEM_FADE) / maxf(count - 1, 1))
+	var t := clampf((open * OPEN_SECONDS - index * delay) / ITEM_FADE, 0.0, 1.0)
+	return 1.0 - pow(1.0 - t, 3)
+
+
+## ゆっくり始まってゆっくり終わる
+static func _ease(p: float) -> float:
+	return 4.0 * p * p * p if p < 0.5 else 1.0 - pow(-2.0 * p + 2.0, 3) / 2.0
 
 
 ## 右のパネル: 名前・説明・記録と、デモ盤面の見出し
